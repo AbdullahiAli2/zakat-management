@@ -1,0 +1,535 @@
+// Online Zakat Payment Management Information System (MIS)
+// Prisma schema — aligned with db/schema.sql
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERUSER
+  ADMIN
+  DONOR
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ZakatType {
+  MAAL
+  BUSINESS
+}
+
+enum PaymentMethod {
+  EVCPLUS
+  E_DAHAB
+  ZAAD
+  CASH
+  WALLET
+}
+
+enum ZakatPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransactionType {
+  DEPOSIT
+  ZAKAT_PAYMENT
+  DISTRIBUTION
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum BeneficiaryCategory {
+  POOR
+  ORPHAN
+  WIDOW
+  DISABLED
+  STUDENT
+  EMERGENCY
+}
+
+enum BeneficiaryStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DistributionType {
+  FOOD
+  CASH
+  MEDICAL
+  EDUCATION
+  WATER
+  EMERGENCY
+}
+
+enum DistributionStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  REJECTED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum WalletType {
+  MAIN
+  ZAKAT
+  SADAQAH
+  EMERGENCY
+  OPERATIONS
+}
+
+enum WalletStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum JournalReferenceType {
+  ZAKAT_PAYMENT
+  DISTRIBUTION
+  COMMUNITY_DISTRIBUTION
+  MANUAL
+  OPENING_BALANCE
+}
+
+enum JournalEntryStatus {
+  POSTED
+  REVERSED
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  firstName String    @map("first_name") @db.VarChar(100)
+  lastName  String    @map("last_name") @db.VarChar(100)
+  email     String    @unique @db.VarChar(255)
+  password  String    @db.VarChar(255)
+  phone     String?   @db.VarChar(50)
+  age       Int?
+  gender    Gender?
+  country   String?   @db.VarChar(100)
+  city      String?   @db.VarChar(100)
+  address   String?   @db.Text
+  role      UserRole  @default(DONOR)
+  avatarUrl String?   @map("avatar_url") @db.VarChar(191)
+  isActive  Boolean   @default(true) @map("is_active")
+  lastLogin DateTime? @map("last_login")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  accounts              Account[]
+  zakatCalculations     ZakatCalculation[]
+  zakatPayments         ZakatPayment[]     @relation("ZakatPaymentUser")
+  approvedPayments      ZakatPayment[]     @relation("ApprovedByUser")
+  transactions          Transaction[]
+  adminDistributions    Distribution[]     @relation("DistributionAdmin")
+  approvedDistributions Distribution[]     @relation("DistributionApprover")
+  adminCommunityDistributions CommunityDistribution[] @relation("CommunityDistributionAdmin")
+  approvedCommunityDistributions CommunityDistribution[] @relation("CommunityDistributionApprover")
+  verifiedBeneficiaries Beneficiary[]      @relation("BeneficiaryVerifier")
+  userGroups            UserGroup[]
+  userPermissions       UserPermission[]
+  audits                Audit[]
+  notifications         Notification[]
+  reports               Report[]
+  backups               Backup[]
+  createdWallets        SystemWallet[]   @relation("WalletCreator")
+  postedJournalEntries  JournalEntry[]   @relation("JournalPoster")
+  reversedJournalEntries JournalEntry[]  @relation("JournalReverser")
+
+  @@index([email], map: "idx_users_email")
+  @@map("users")
+}
+
+model Permission {
+  id         Int               @id @default(autoincrement())
+  codename   String            @unique @db.VarChar(100)
+  name       String            @db.VarChar(255)
+  userLinks  UserPermission[]
+  groupLinks GroupPermission[]
+
+  @@map("permissions")
+}
+
+model Group {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique @db.VarChar(100)
+  users       UserGroup[]
+  permissions GroupPermission[]
+
+  @@map("groups")
+}
+
+model UserGroup {
+  id      Int @id @default(autoincrement())
+  userId  Int @map("user_id")
+  groupId Int @map("group_id")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@map("user_group")
+}
+
+model GroupPermission {
+  id           Int @id @default(autoincrement())
+  groupId      Int @map("group_id")
+  permissionId Int @map("permission_id")
+
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, permissionId])
+  @@map("group_permission")
+}
+
+model UserPermission {
+  id           Int @id @default(autoincrement())
+  userId       Int @map("user_id")
+  permissionId Int @map("permission_id")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@map("user_permission")
+}
+
+model Account {
+  id        Int           @id @default(autoincrement())
+  userId    Int           @map("user_id")
+  name      String        @db.VarChar(255)
+  balance   Decimal       @default(0) @db.Decimal(15, 2)
+  status    AccountStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  zakatPayments ZakatPayment[]
+
+  @@map("accounts")
+}
+
+model NisabSetting {
+  id               Int      @id @default(autoincrement())
+  goldPricePerGram Decimal  @map("gold_price_per_gram") @db.Decimal(10, 2)
+  nisabValue       Decimal  @map("nisab_value") @db.Decimal(15, 2)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("nisab_settings")
+}
+
+model ZakatCalculation {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  totalAssets Decimal  @map("total_assets") @db.Decimal(15, 2)
+  liabilities Decimal  @default(0) @db.Decimal(15, 2)
+  netAssets   Decimal  @map("net_assets") @db.Decimal(15, 2)
+  nisabValue  Decimal  @map("nisab_value") @db.Decimal(15, 2)
+  zakatDue    Decimal  @map("zakat_due") @db.Decimal(15, 2)
+  zakatYear   Int?     @map("zakat_year") @db.Year
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user     User           @relation(fields: [userId], references: [id])
+  payments ZakatPayment[]
+
+  @@index([userId, zakatYear], map: "idx_zakat_calc_user_year")
+  @@map("zakat_calculations")
+}
+
+model ZakatPayment {
+  id              Int                @id @default(autoincrement())
+  userId          Int                @map("user_id")
+  accountId       Int                @map("account_id")
+  calculationId   Int?               @map("calculation_id")
+  amount          Decimal            @db.Decimal(15, 2)
+  zakatType       ZakatType          @map("zakat_type")
+  method          PaymentMethod
+  status          ZakatPaymentStatus @default(PENDING)
+  referenceNumber String?            @map("reference_number") @db.VarChar(255)
+  approvedBy      Int?               @map("approved_by")
+  approvedAt      DateTime?          @map("approved_at")
+  nisabChecked    Boolean            @default(true) @map("nisab_checked")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  user         User              @relation("ZakatPaymentUser", fields: [userId], references: [id])
+  account      Account           @relation(fields: [accountId], references: [id])
+  calculation  ZakatCalculation? @relation(fields: [calculationId], references: [id])
+  approver     User?             @relation("ApprovedByUser", fields: [approvedBy], references: [id])
+  transactions Transaction[]
+
+  @@index([status], map: "idx_payments_status")
+  @@map("zakat_payments")
+}
+
+model Transaction {
+  id              Int               @id @default(autoincrement())
+  userId          Int               @map("user_id")
+  accountId       Int?              @map("account_id")
+  zakatPaymentId  Int?              @map("zakat_payment_id")
+  type            TransactionType
+  amount          Decimal           @db.Decimal(15, 2)
+  status          TransactionStatus @default(SUCCESS)
+  transactionCode String?           @unique @map("transaction_code") @db.VarChar(100)
+  reference       String?           @db.VarChar(255)
+  gatewayResponse String?           @map("gateway_response") @db.Text
+  description     String?           @db.Text
+  journalEntryId  Int?              @map("journal_entry_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  user          User           @relation(fields: [userId], references: [id])
+  account       Account?       @relation(fields: [accountId], references: [id])
+  zakatPayment  ZakatPayment?  @relation(fields: [zakatPaymentId], references: [id])
+  journalEntry  JournalEntry?  @relation(fields: [journalEntryId], references: [id])
+  distributions Distribution[]
+  communityDistributions CommunityDistribution[]
+  receipts      Receipt[]
+
+  @@index([userId], map: "idx_transactions_user")
+  @@index([status], map: "idx_transactions_status")
+  @@index([journalEntryId], map: "idx_transactions_journal")
+  @@map("transactions")
+}
+
+model ChartOfAccount {
+  id          Int         @id @default(autoincrement())
+  code        String      @unique @db.VarChar(20)
+  name        String      @db.VarChar(255)
+  accountType AccountType @map("account_type")
+  parentId    Int?        @map("parent_id")
+  isActive    Boolean     @default(true) @map("is_active")
+  description String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  parent   ChartOfAccount?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children ChartOfAccount[] @relation("AccountHierarchy")
+  wallets  SystemWallet[]
+  lines    JournalEntryLine[]
+
+  @@index([accountType], map: "idx_coa_type")
+  @@map("chart_of_accounts")
+}
+
+model SystemWallet {
+  id             Int          @id @default(autoincrement())
+  code           String       @unique @db.VarChar(30)
+  name           String       @db.VarChar(255)
+  walletType     WalletType   @map("wallet_type")
+  chartAccountId Int          @map("chart_account_id")
+  status         WalletStatus @default(ACTIVE)
+  createdBy      Int?         @map("created_by")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at")
+
+  chartAccount ChartOfAccount     @relation(fields: [chartAccountId], references: [id])
+  creator      User?              @relation("WalletCreator", fields: [createdBy], references: [id])
+  journalLines JournalEntryLine[]
+
+  @@index([walletType], map: "idx_wallets_type")
+  @@index([status], map: "idx_wallets_status")
+  @@map("system_wallets")
+}
+
+model JournalEntry {
+  id            Int                  @id @default(autoincrement())
+  entryNumber   String               @unique @map("entry_number") @db.VarChar(50)
+  entryDate     DateTime             @default(now()) @map("entry_date")
+  description   String?              @db.Text
+  referenceType JournalReferenceType @map("reference_type")
+  referenceId   Int?                 @map("reference_id")
+  status        JournalEntryStatus   @default(POSTED)
+  postedBy      Int?                 @map("posted_by")
+  postedAt      DateTime             @default(now()) @map("posted_at")
+  reversedBy    Int?                 @map("reversed_by")
+  reversedAt    DateTime?            @map("reversed_at")
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  poster       User?              @relation("JournalPoster", fields: [postedBy], references: [id])
+  reverser     User?              @relation("JournalReverser", fields: [reversedBy], references: [id])
+  lines        JournalEntryLine[]
+  transactions Transaction[]
+
+  @@index([referenceType, referenceId], map: "idx_journal_ref")
+  @@index([status], map: "idx_journal_status")
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             Int     @id @default(autoincrement())
+  journalEntryId Int     @map("journal_entry_id")
+  accountId      Int     @map("account_id")
+  walletId       Int?    @map("wallet_id")
+  debit          Decimal @default(0) @db.Decimal(15, 2)
+  credit         Decimal @default(0) @db.Decimal(15, 2)
+  lineDescription String? @map("line_description") @db.VarChar(255)
+
+  journalEntry JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      ChartOfAccount @relation(fields: [accountId], references: [id])
+  wallet       SystemWallet?  @relation(fields: [walletId], references: [id])
+
+  @@index([accountId], map: "idx_jel_account")
+  @@index([walletId], map: "idx_jel_wallet")
+  @@map("journal_entry_lines")
+}
+
+model Beneficiary {
+  id             Int                 @id @default(autoincrement())
+  firstName      String?             @map("first_name") @db.VarChar(100)
+  lastName       String?             @map("last_name") @db.VarChar(100)
+  phone          String?             @db.VarChar(50)
+  gender         Gender?
+  category       BeneficiaryCategory
+  nationalId     String?             @map("national_id") @db.VarChar(100)
+  familySize     Int?                @map("family_size")
+  monthlyIncome  Decimal?            @map("monthly_income") @db.Decimal(15, 2)
+  address        String?             @db.Text
+  status         BeneficiaryStatus   @default(PENDING)
+  verifiedBy     Int?                @map("verified_by")
+  verifiedAt     DateTime?           @map("verified_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  verifier      User?          @relation("BeneficiaryVerifier", fields: [verifiedBy], references: [id])
+  distributions Distribution[]
+
+  @@index([status], map: "idx_beneficiaries_status")
+  @@map("beneficiaries")
+}
+
+model Distribution {
+  id               Int                @id @default(autoincrement())
+  beneficiaryId    Int                @map("beneficiary_id")
+  adminId          Int                @map("admin_id")
+  transactionId    Int?               @map("transaction_id")
+  amount           Decimal            @db.Decimal(15, 2)
+  distributionType DistributionType   @map("distribution_type")
+  status           DistributionStatus @default(PENDING)
+  notes            String?            @db.Text
+  approvedBy       Int?               @map("approved_by")
+  approvedAt       DateTime?          @map("approved_at")
+  completedAt      DateTime?          @map("completed_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  beneficiary Beneficiary  @relation(fields: [beneficiaryId], references: [id])
+  admin       User         @relation("DistributionAdmin", fields: [adminId], references: [id])
+  approver    User?        @relation("DistributionApprover", fields: [approvedBy], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([status], map: "idx_distributions_status")
+  @@map("distributions")
+}
+
+model CommunityDistribution {
+  id               Int                @id @default(autoincrement())
+  adminId          Int                @map("admin_id")
+  transactionId    Int?               @map("transaction_id")
+  title            String             @db.VarChar(255)
+  distributionType DistributionType   @map("distribution_type")
+  beneficiaryCount Int                @default(0) @map("beneficiary_count")
+  amount           Decimal            @db.Decimal(15, 2)
+  location         String?            @db.VarChar(255)
+  status           DistributionStatus @default(PENDING)
+  notes            String?            @db.Text
+  approvedBy       Int?               @map("approved_by")
+  approvedAt       DateTime?          @map("approved_at")
+  completedAt      DateTime?          @map("completed_at")
+  distributionDate DateTime?          @map("distribution_date")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  admin       User         @relation("CommunityDistributionAdmin", fields: [adminId], references: [id])
+  approver    User?        @relation("CommunityDistributionApprover", fields: [approvedBy], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([status], map: "idx_community_distributions_status")
+  @@map("community_distributions")
+}
+
+model Receipt {
+  id            Int         @id @default(autoincrement())
+  transactionId Int         @map("transaction_id")
+  receiptNumber String      @unique @map("receipt_number") @db.VarChar(100)
+  generatedAt   DateTime    @default(now()) @map("generated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@map("receipts")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String?  @db.VarChar(255)
+  message   String?  @db.Text
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_notifications_user")
+  @@index([userId, isRead], map: "idx_notifications_user_read")
+  @@map("notifications")
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  reportType  String?  @map("report_type") @db.VarChar(100)
+  generatedBy Int?     @map("generated_by")
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  generator User? @relation(fields: [generatedBy], references: [id])
+
+  @@map("reports")
+}
+
+model Backup {
+  id         Int      @id @default(autoincrement())
+  backupName String?  @map("backup_name") @db.VarChar(255)
+  filePath   String?  @map("file_path") @db.VarChar(255)
+  createdBy  Int?     @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@map("backups")
+}
+
+model Audit {
+  id              Int      @id @default(autoincrement())
+  userId          Int?     @map("user_id")
+  path            String?  @db.VarChar(255)
+  action          String?  @db.Text
+  module          String?  @db.Text
+  operatingSystem String?  @map("operating_system") @db.VarChar(200)
+  browser         String?  @db.VarChar(200)
+  ipAddress       String?  @map("ip_address") @db.VarChar(200)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_audits_user")
+  @@map("audits")
+}
