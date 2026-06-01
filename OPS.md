@@ -31,9 +31,9 @@ npm install
 npm run setup
 ```
 
-Do **not** run `npx prisma migrate dev --name init` on a Git clone.
+Do **not** run `npx prisma migrate dev` on a Git clone (students use the committed migration only).
 
-`npm run setup` creates all tables and seeds permissions, nisab, and the SUPERUSER (when `BOOTSTRAP_ADMIN_*` is set in `.env`).
+The repo ships **one** migration: `20260601000000_init`. `npm run setup` applies it on an empty database, then seeds permissions, nisab, and the SUPERUSER (when `BOOTSTRAP_ADMIN_*` is set in `.env`).
 
 #### Option B: Use raw SQL (e.g. via Beekeeper)
 

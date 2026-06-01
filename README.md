@@ -26,13 +26,15 @@ A web-based Zakat Management System developed using Next.js, Node.js, and MySQL.
 - [Node.js](https://nodejs.org/) (LTS)
 - [XAMPP](https://www.apachefriends.org/) — start **MySQL**
 
-### 2. Create database
+### 2. Create an empty database
 
-In phpMyAdmin or MySQL:
+In phpMyAdmin or MySQL, create a **new empty** database (do not import SQL files):
 
 ```sql
 CREATE DATABASE zakat_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
+
+`npm run setup` will create all tables from the single migration in the repo.
 
 ### 3. Create `.env`
 
@@ -66,7 +68,9 @@ npm run setup
 ```
 
 - `npm install` — installs packages and generates Prisma client (automatic)
-- `npm run setup` — creates tables and seeds permissions, nisab, and superuser
+- `npm run setup` — applies **one** fresh migration (all tables), then seeds permissions, nisab, and superuser
+
+You should see: `1 migration found` → `Applying migration 20260601000000_init`.
 
 ### 5. Run the app
 
@@ -87,9 +91,19 @@ Donors register at `/register`. Additional admins are created in **Admin → Use
 | Cannot connect to database | MySQL running; database exists; `DATABASE_URL` correct |
 | Seed OK but cannot log in | Set `BOOTSTRAP_ADMIN_*` in `.env`, then `npm run setup` again |
 | Migrate error `P3015` | Delete empty folders under `prisma/migrations/` (no `migration.sql`) |
+| Migrate error `P3018` or `P3009` (failed migration) | `npm run db:reset-local` then `npm run setup` |
 | Old database missing columns | `npm run db:repair` (only if instructor says so) |
 
-Advanced commands (optional): `npm run db:migrate`, `npm run db:seed`
+**If `npm run setup` failed halfway**, reset the database (local dev only), then setup again:
+
+```bash
+npm run db:reset-local
+npm run setup
+```
+
+Or in phpMyAdmin: `DROP DATABASE` your DB name, `CREATE DATABASE` with `utf8mb4_unicode_ci`, then `npm run setup`.
+
+Advanced commands (optional): `npm run db:migrate`, `npm run db:seed`, `npm run db:reset-local`
 
 More detail: [OPS.md](./OPS.md)
 

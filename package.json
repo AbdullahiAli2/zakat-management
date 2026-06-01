@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:setup": "npm run setup",
-    "db:repair": "node ./scripts/repair-database.mjs"
+    "db:repair": "node ./scripts/repair-database.mjs",
+    "db:reset-local": "node ./scripts/reset-local-database.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
