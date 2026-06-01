@@ -7,9 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
+    "jwt:secret": "node ./scripts/generate-jwt-secret.mjs",
+    "setup": "prisma migrate deploy && prisma db seed",
     "db:migrate": "prisma migrate deploy",
-    "db:repair": "node ./scripts/repair-database.mjs",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:setup": "npm run setup",
+    "db:repair": "node ./scripts/repair-database.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

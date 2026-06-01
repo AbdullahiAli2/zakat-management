@@ -29,8 +29,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full overflow-x-hidden antialiased">
-      <body className={`${poppins.className} flex h-dvh min-w-0 flex-col overflow-hidden`}>
+    <html
+      lang="en"
+      className="h-full overflow-x-hidden antialiased"
+      suppressHydrationWarning
+    >
+      <body
+        className={`${poppins.className} flex h-dvh min-w-0 flex-col overflow-hidden`}
+        suppressHydrationWarning
+      >
         <Providers>
           <AuthSessionBoundary>
             <AppShell>{children}</AppShell>

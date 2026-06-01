@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
 
@@ -79,19 +80,35 @@ async function seedNisab() {
   });
 }
 
-async function seedBootstrapUser(input: {
-  role: "SUPERUSER" | "ADMIN" | "DONOR";
-  name?: string;
-  email?: string;
-  password?: string;
-}) {
-  const { role, name, email, password } = input;
-  if (!name || !email || !password) return;
+function missingBootstrapVars(role: string, keys: string[]) {
+  const missing = keys.filter((k) => !process.env[k]?.trim());
+  if (missing.length === 0) return null;
+  console.warn(
+    `[seed] Skipping ${role}: set ${missing.join(", ")} in .env (see .env.example).`,
+  );
+  return missing;
+}
+
+async function seedSuperuser() {
+  const name = process.env.BOOTSTRAP_ADMIN_NAME;
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+
+  if (!name || !email || !password) {
+    missingBootstrapVars("SUPERUSER", [
+      "BOOTSTRAP_ADMIN_NAME",
+      "BOOTSTRAP_ADMIN_EMAIL",
+      "BOOTSTRAP_ADMIN_PASSWORD",
+    ]);
+    throw new Error(
+      "Missing BOOTSTRAP_ADMIN_* in .env — copy them from .env.example, then run: npm run setup",
+    );
+  }
 
   const passwordHash = await hash(password, 12);
   const names = name.trim().split(/\s+/);
-  const firstName = names[0] ?? "User";
-  const lastName = names.slice(1).join(" ") || "Account";
+  const firstName = names[0] ?? "Super";
+  const lastName = names.slice(1).join(" ") || "Admin";
 
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.upsert({
@@ -102,14 +119,14 @@ async function seedBootstrapUser(input: {
         email,
         password: passwordHash,
         isActive: true,
-        role,
+        role: "SUPERUSER",
       },
       update: {
         firstName,
         lastName,
         password: passwordHash,
         isActive: true,
-        role,
+        role: "SUPERUSER",
       },
     });
 
@@ -124,50 +141,17 @@ async function seedBootstrapUser(input: {
         },
       });
     }
-
-    if (role === "ADMIN") {
-      const adminGroup = await tx.group.upsert({
-        where: { name: "Admin Group" },
-        update: {},
-        create: { name: "Admin Group" },
-      });
-      await tx.userGroup.upsert({
-        where: { userId_groupId: { userId: user.id, groupId: adminGroup.id } },
-        update: {},
-        create: { userId: user.id, groupId: adminGroup.id },
-      });
-      const perms = await tx.permission.findMany();
-      for (const permission of perms) {
-        await tx.groupPermission.upsert({
-          where: { groupId_permissionId: { groupId: adminGroup.id, permissionId: permission.id } },
-          update: {},
-          create: { groupId: adminGroup.id, permissionId: permission.id },
-        });
-      }
-    }
-  });
-}
-
-async function seedBootstrapUsers() {
-  await seedBootstrapUser({
-    role: "SUPERUSER",
-    name: process.env.BOOTSTRAP_ADMIN_NAME,
-    email: process.env.BOOTSTRAP_ADMIN_EMAIL,
-    password: process.env.BOOTSTRAP_ADMIN_PASSWORD,
   });
 
-  await seedBootstrapUser({
-    role: "ADMIN",
-    name: process.env.BOOTSTRAP_ACCOUNTANT_NAME,
-    email: process.env.BOOTSTRAP_ACCOUNTANT_EMAIL,
-    password: process.env.BOOTSTRAP_ACCOUNTANT_PASSWORD,
-  });
+  console.log(`[seed] Superuser ready: ${email}`);
 }
 
 async function main() {
   await seedRBAC();
+  console.log("[seed] Permissions upserted.");
   await seedNisab();
-  await seedBootstrapUsers();
+  console.log("[seed] Nisab settings ready.");
+  await seedSuperuser();
 }
 
 main()

@@ -2,21 +2,19 @@
 
 ### 1. Environment variables
 
-Create a `.env` file in the project root (same folder as `package.json`) with:
+Copy `.env.example` to `.env` in the project root (same folder as `package.json`), then adjust:
 
 ```bash
-DATABASE_URL="mysql://USER:PASSWORD@localhost:3306/zakat_mgmt"
-JWT_SECRET="a-long-random-secret-string"
-NISAB_VALUE="1000" # or whatever value you want as default
-BOOTSTRAP_ADMIN_NAME="System Admin"
+DATABASE_URL="mysql://USER:PASSWORD@localhost:3306/zakat_db"
+JWT_SECRET="your-own-long-random-secret"
+BOOTSTRAP_ADMIN_NAME="Super Admin"
 BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
 BOOTSTRAP_ADMIN_PASSWORD="ChangeMe123!"
-BOOTSTRAP_ACCOUNTANT_NAME="System Accountant"
-BOOTSTRAP_ACCOUNTANT_EMAIL="accountant@example.com"
-BOOTSTRAP_ACCOUNTANT_PASSWORD="ChangeMe123!"
 ```
 
 Adjust DB name / user / password to match your local MySQL.
+
+**JWT secret:** run `npm run jwt:secret` and paste the printed line into `.env` as `JWT_SECRET`.
 
 ### 2. Database bootstrap (MySQL + Beekeeper Studio)
 
@@ -29,13 +27,13 @@ You have two options; with Prisma migrations or raw SQL.
 3. From the project root:
 
 ```bash
-npx prisma migrate dev --name init
-npm run db:seed
+npm install
+npm run setup
 ```
 
-This will:
-- Create all tables defined in `prisma/schema.prisma`
-- Seed roles, permissions, and an initial `settings` row for `nisab_value`
+Do **not** run `npx prisma migrate dev --name init` on a Git clone.
+
+`npm run setup` creates all tables and seeds permissions, nisab, and the SUPERUSER (when `BOOTSTRAP_ADMIN_*` is set in `.env`).
 
 #### Option B: Use raw SQL (e.g. via Beekeeper)
 
@@ -45,22 +43,13 @@ This will:
 4. Once tables are created, you can still run the Prisma seed to populate RBAC + nisab:
 
 ```bash
-npx prisma generate
-npm run db:seed
+npm install
+npm run setup
 ```
 
-### 3. Bootstrapping Admin and Accountant users
+### 3. Bootstrapping the superuser
 
-1. Set these optional vars in `.env`:
-
-```bash
-BOOTSTRAP_ADMIN_NAME="System Admin"
-BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
-BOOTSTRAP_ADMIN_PASSWORD="ChangeMe123!"
-BOOTSTRAP_ACCOUNTANT_NAME="System Accountant"
-BOOTSTRAP_ACCOUNTANT_EMAIL="accountant@example.com"
-BOOTSTRAP_ACCOUNTANT_PASSWORD="ChangeMe123!"
-```
+1. Set `BOOTSTRAP_ADMIN_*` in `.env` (see `.env.example`).
 
 2. Run seed:
 
@@ -74,19 +63,19 @@ npm run db:seed
 npm run dev
 ```
 
-4. Log in at `http://localhost:3000/login`:
-   - Admin account redirects to `/admin`
-   - Accountant account redirects to `/accountant`
+4. Log in at `http://localhost:3000/login` with the superuser email/password.
 
-5. Donor registration remains at `/register` (donor only). After you are inside Admin, open `Admin > Users` and change any user role to `ADMIN`, `ACCOUNTANT`, or `DONOR`.
+5. **Donors** register at `/register`. **Admins** are created or promoted in `Admin > Users` by the superuser.
 
 ### 4. Basic commands
 
 - **Dev server**: `npm run dev`
 - **Typecheck**: `npx tsc --noEmit`
 - **Lint**: `npm run lint`
-- **Run migrations in prod**: `npm run db:migrate`
-- **Re-run seed (safe / idempotent)**: `npm run db:seed`
+- **Fresh clone setup**: `npm install` then `npm run setup`
+- **Re-run seed only**: `npm run db:seed`
+- **Migrations only**: `npm run db:migrate`
+- **Repair old DB columns**: `npm run db:repair`
 
 ### 5. Verifying tables in Beekeeper Studio
 
