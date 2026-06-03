@@ -166,7 +166,14 @@ export const beneficiaryCreateSchema = z.object({
 });
 
 export const reportGenerateSchema = z.object({
-  reportType: z.enum(["ZAKAT_SUMMARY", "DISTRIBUTION_SUMMARY", "BENEFICIARY_LIST", "TRANSACTION_LEDGER", "AUDIT_TRAIL"]),
+  reportType: z.enum([
+    "DONOR_LIST",
+    "ZAKAT_PAYMENTS",
+    "ZAKAT_SUMMARY",
+    "TRANSACTION_LEDGER",
+    "DISTRIBUTION_SUMMARY",
+    "BENEFICIARY_LIST",
+  ]),
   fromDate: z.string().datetime().optional(),
   toDate: z.string().datetime().optional(),
 });

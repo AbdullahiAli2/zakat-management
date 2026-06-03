@@ -13,6 +13,8 @@ export type ZakatSummarySnapshot = {
   belowNisab?: boolean | null;
   remainingDue?: string | null;
   paidThisCycle?: string | null;
+  pendingThisCycle?: string | null;
+  hasPendingPayment?: boolean;
   calculatedZakat?: string | null;
 };
 
@@ -73,13 +75,26 @@ export function ZakatStatusNotice({
     );
   }
 
+  if (summary.hasPendingPayment) {
+    const pending = Number(summary.pendingThisCycle ?? 0);
+    return (
+      <Card className="border-amber-200/60 bg-amber-50/50">
+        <CardContent className="py-4 text-sm text-amber-900">
+          {pending > 0
+            ? `${formatCurrency(pending)} zakat is waiting for admin approval. You cannot pay again until it is approved or rejected.`
+            : "Your zakat payment is waiting for admin approval. You cannot pay again until it is approved or rejected."}
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (summary.zakatDue === false && summary.belowNisab === false) {
     return (
       <Card className="border-[#16a34a]/20 bg-[#f0fdf4]">
         <CardContent className="py-4 text-sm text-[#166534]">
           You are up to date — no zakat payment is required this cycle.
           {Number(summary.paidThisCycle ?? 0) > 0
-            ? ` (${formatCurrency(summary.paidThisCycle ?? 0)} paid this year.)`
+            ? ` (${formatCurrency(summary.paidThisCycle ?? 0)} approved this year.)`
             : ""}
         </CardContent>
       </Card>

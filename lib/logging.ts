@@ -41,26 +41,12 @@ type ErrorInput = {
   path?: string | null;
 };
 
+/** Server-side diagnostic only — failures are not written to the audit trail. */
 export async function logError(input: ErrorInput) {
-  await prisma.audit.create({
-    data: {
-      userId: input.userId ?? null,
-      action: "ERROR",
-      module: "system",
-      // Keep details in action/module/path fields since error_logs table was removed.
-      path: input.path ?? null,
-      operatingSystem: null,
-      browser: null,
-      ipAddress: null,
-    },
-  });
-  await prisma.audit.create({
-    data: {
-      userId: input.userId ?? null,
-      path: input.path ?? null,
-      action: `${input.message}${input.lineNumber ? ` (line ${input.lineNumber})` : ""}`,
-      module: input.stack ? input.stack.slice(0, 5000) : "no-stack",
-    },
-  });
+  if (process.env.NODE_ENV === "development") {
+    const line = input.lineNumber ? ` (line ${input.lineNumber})` : "";
+    console.error(`[api] ${input.path ?? "?"} — ${input.message}${line}`);
+    if (input.stack) console.error(input.stack);
+  }
 }
 

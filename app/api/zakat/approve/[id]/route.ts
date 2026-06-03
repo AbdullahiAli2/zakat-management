@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { readJwtFromRequest, verifySessionJwt } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit, logError } from "@/lib/logging";
+import { ensureDefaultAccounting } from "@/lib/accounting/ensure-defaults";
 import { postZakatCollectionJournal } from "@/lib/accounting/postings";
 import { notifyPaymentApproved, notifyReceiptGenerated } from "@/lib/notifications";
 import { isZodError, zodErrorBody } from "@/lib/parse-request";
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!payment.account_id) return NextResponse.json({ ok: false, error: "Payment has no account" }, { status: 400 });
 
     await prisma.$transaction(async (tx) => {
+      await ensureDefaultAccounting(tx);
+
       // Enforce idempotency/race-safety: only approve if still pending.
       const paymentUpdateResult = await tx.$executeRawUnsafe(
         "UPDATE zakat_payments SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ? AND status = 'PENDING'",
@@ -144,7 +147,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json(zod.body, { status: zod.status });
     }
     const e = err as { message?: string; stack?: string; status?: number; lineNumber?: number };
-    await logError({ userId: null, message: e?.message ?? "Approve zakat failed", stack: e?.stack, path, lineNumber: e?.lineNumber ?? null });
+    await logError({
+      userId: null,
+      message: e?.message ?? "Approve zakat failed",
+      stack: e?.stack,
+      path,
+      lineNumber: e?.lineNumber ?? null,
+    });
     return NextResponse.json({ ok: false, error: e?.message ?? "Approve zakat failed" }, { status: e?.status ?? 500 });
   }
 }

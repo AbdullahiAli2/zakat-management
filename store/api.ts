@@ -144,9 +144,10 @@ export const api = createApi({
         body,
       }),
       transformResponse: (response: any) => response.receipt,
-      invalidatesTags: [
+      invalidatesTags: (_result, _error, arg) => [
         { type: "Accounts", id: "LIST" },
         { type: "ZakatSummary", id: "LIST" },
+        ...(arg.accountId ? [{ type: "ZakatSummary" as const, id: arg.accountId }] : []),
         { type: "Transactions", id: "LIST" },
       ],
     }),
@@ -185,10 +186,18 @@ export const api = createApi({
     approveZakatPayment: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/zakat/approve/${id}`, method: "POST" }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [
+        { type: "ZakatSummary", id: "LIST" },
+        { type: "Transactions", id: "LIST" },
+      ],
     }),
     rejectZakatPayment: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/zakat/reject/${id}`, method: "POST" }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [
+        { type: "ZakatSummary", id: "LIST" },
+        { type: "Transactions", id: "LIST" },
+      ],
     }),
     getZakatSummary: builder.query<
       {
@@ -198,6 +207,8 @@ export const api = createApi({
         rate: string;
         calculatedZakat: string | null;
         paidThisCycle: string | null;
+        pendingThisCycle: string | null;
+        hasPendingPayment: boolean;
         remainingDue: string | null;
         belowNisab: boolean | null;
         zakatDue: boolean | null;
@@ -308,7 +319,15 @@ export const api = createApi({
     }),
     generateAdminReport: builder.mutation<
       { id: number; reportType: string; generatedAt: string; payload: unknown },
-      { reportType: "ZAKAT_SUMMARY" | "TRANSACTION_LEDGER" }
+      {
+        reportType:
+          | "DONOR_LIST"
+          | "ZAKAT_PAYMENTS"
+          | "ZAKAT_SUMMARY"
+          | "TRANSACTION_LEDGER"
+          | "DISTRIBUTION_SUMMARY"
+          | "BENEFICIARY_LIST";
+      }
     >({
       query: (body) => ({ url: "/api/admin/reports", method: "POST", body }),
       transformResponse: (response: any) => response.data,
@@ -830,7 +849,11 @@ export const api = createApi({
       query: ({ userId, ...body }) => ({ url: `/api/admin/users/${userId}/permissions`, method: "POST", body }),
     }),
     updateUserPermissions: builder.mutation<{ ok: boolean }, { userId: number; permissionIds: number[] }>({
-      query: ({ userId, permissionIds }) => ({ url: `/api/users/${userId}/permissions`, method: "PUT", body: { permissionIds } }),
+      query: ({ userId, permissionIds }) => ({
+        url: `/api/admin/users/${userId}/permissions`,
+        method: "PUT",
+        body: { permissionIds },
+      }),
     }),
     getUserGroups: builder.query<Array<{ id: number; name: string; enabled: boolean }>, { userId: number }>({
       query: ({ userId }) => ({ url: `/api/admin/users/${userId}/groups`, method: "GET" }),

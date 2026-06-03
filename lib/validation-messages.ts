@@ -201,6 +201,10 @@ export function friendlyBusinessError(message: string): string {
     "Email already exists": "This email is already in use. Choose a different email.",
     "Insufficient zakat wallet balance": "Not enough balance in the zakat wallet for this action.",
     "Insufficient ZAKAT wallet balance": "Not enough balance in the zakat wallet for this action.",
+    "Zakat wallet is not available":
+      "The Zakat system wallet is not set up. Ask an administrator to run: npm run db:seed",
+    "Required GL accounts are not configured":
+      "Accounting accounts are missing. Ask an administrator to run: npm run db:seed",
     "Community distribution not found": "Community distribution was not found.",
     "Only pending distributions can be approved": "Only pending distributions can be approved.",
     "Insufficient account balance": "Payment amount is more than your wallet balance.",
@@ -209,6 +213,8 @@ export function friendlyBusinessError(message: string): string {
     "Payment is below Nisab (85g gold) and cannot be approved":
       "Your balance is below the Nisab threshold. No zakat is due until your wealth reaches Nisab.",
     "Zakat for this cycle is already fulfilled": "You have already paid your zakat for this cycle.",
+    "You already have a zakat payment pending admin approval":
+      "You already submitted zakat and it is waiting for admin approval. You cannot pay again until it is approved or rejected.",
   };
   return map[message] ?? message;
 }

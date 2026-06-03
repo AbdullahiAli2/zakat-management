@@ -4,33 +4,13 @@ import { prisma } from "@/lib/db";
 import { readJwtFromRequest, verifySessionJwt } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit, logError } from "@/lib/logging";
+import { buildReportPayload } from "@/lib/reports";
 import { reportGenerateSchema } from "@/lib/validation";
 import { validationErrorBody } from "@/lib/validation-messages";
 import { parseRequestBody, isZodError, zodErrorBody } from "@/lib/parse-request";
 
 function ip(req: NextRequest) {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
-}
-
-async function buildReportPayload(reportType: string) {
-  switch (reportType) {
-    case "ZAKAT_SUMMARY":
-      return prisma.$queryRawUnsafe<Array<{ status: string; total: number | string }>>(
-        "SELECT status, COALESCE(SUM(amount),0) AS total FROM zakat_payments GROUP BY status",
-      );
-    case "DISTRIBUTION_SUMMARY":
-      return prisma.$queryRawUnsafe<Array<{ status: string; total: number | string }>>(
-        "SELECT status, COALESCE(SUM(amount),0) AS total FROM distributions GROUP BY status",
-      );
-    case "BENEFICIARY_LIST":
-      return prisma.beneficiary.findMany({ take: 500, orderBy: { createdAt: "desc" } });
-    case "TRANSACTION_LEDGER":
-      return prisma.transaction.findMany({ take: 500, orderBy: { createdAt: "desc" } });
-    case "AUDIT_TRAIL":
-      return prisma.audit.findMany({ take: 500, orderBy: { createdAt: "desc" } });
-    default:
-      return [];
-  }
 }
 
 export async function GET(req: NextRequest) {

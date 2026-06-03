@@ -146,11 +146,66 @@ async function seedSuperuser() {
   console.log(`[seed] Superuser ready: ${email}`);
 }
 
+async function seedAccounting() {
+  const chartAccounts = [
+    { code: "1000", name: "Main Cash Pool", accountType: "ASSET" as const },
+    { code: "1010", name: "Zakat Cash Pool", accountType: "ASSET" as const },
+    { code: "1020", name: "Sadaqah Cash Pool", accountType: "ASSET" as const },
+    { code: "1030", name: "Emergency Cash Pool", accountType: "ASSET" as const },
+    { code: "1040", name: "Operations Cash Pool", accountType: "ASSET" as const },
+    { code: "4000", name: "Zakat Income", accountType: "INCOME" as const },
+    { code: "4100", name: "Sadaqah Income", accountType: "INCOME" as const },
+    { code: "5000", name: "Zakat Distribution Expense", accountType: "EXPENSE" as const },
+    { code: "5100", name: "Emergency Distribution Expense", accountType: "EXPENSE" as const },
+    { code: "5200", name: "Operations Expense", accountType: "EXPENSE" as const },
+  ];
+
+  for (const account of chartAccounts) {
+    await prisma.chartOfAccount.upsert({
+      where: { code: account.code },
+      create: { code: account.code, name: account.name, accountType: account.accountType, isActive: true },
+      update: { name: account.name, accountType: account.accountType, isActive: true },
+    });
+  }
+
+  const systemWallets = [
+    { code: "WAL-MAIN", name: "Main Pool", walletType: "MAIN" as const, chartCode: "1000" },
+    { code: "WAL-ZAKAT", name: "Zakat Pool", walletType: "ZAKAT" as const, chartCode: "1010" },
+    { code: "WAL-SADAQAH", name: "Sadaqah Pool", walletType: "SADAQAH" as const, chartCode: "1020" },
+    { code: "WAL-EMERGENCY", name: "Emergency Pool", walletType: "EMERGENCY" as const, chartCode: "1030" },
+    { code: "WAL-OPS", name: "Operations Pool", walletType: "OPERATIONS" as const, chartCode: "1040" },
+  ];
+
+  for (const wallet of systemWallets) {
+    const chartAccount = await prisma.chartOfAccount.findUnique({ where: { code: wallet.chartCode } });
+    if (!chartAccount) throw new Error(`Missing chart account ${wallet.chartCode}`);
+    await prisma.systemWallet.upsert({
+      where: { code: wallet.code },
+      create: {
+        code: wallet.code,
+        name: wallet.name,
+        walletType: wallet.walletType,
+        chartAccountId: chartAccount.id,
+        status: "ACTIVE",
+      },
+      update: {
+        name: wallet.name,
+        walletType: wallet.walletType,
+        chartAccountId: chartAccount.id,
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  console.log("[seed] Chart of accounts and system wallets ready.");
+}
+
 async function main() {
   await seedRBAC();
   console.log("[seed] Permissions upserted.");
   await seedNisab();
   console.log("[seed] Nisab settings ready.");
+  await seedAccounting();
   await seedSuperuser();
 }
 

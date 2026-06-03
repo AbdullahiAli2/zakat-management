@@ -56,6 +56,12 @@ export default function PayZakatPage() {
   const payBlockReason = React.useMemo(() => {
     if (!accountMe?.accounts?.length) return "Create a wallet account before paying zakat.";
     if (!accountId || summaryLoading) return null;
+    if (summary?.hasPendingPayment) {
+      const pending = Number(summary.pendingThisCycle ?? 0);
+      return pending > 0
+        ? `You have ${formatCurrency(pending)} zakat waiting for admin approval. You cannot submit another payment until it is approved or rejected.`
+        : "You have a zakat payment waiting for admin approval. You cannot submit another payment until it is approved or rejected.";
+    }
     if (summary?.belowNisab === true) {
       return `Your balance (${formatCurrency(accountBalanceNumber)}) is below Nisab (${formatCurrency(summary?.nisabValue ?? 0)}). No zakat is due on this wealth. Add funds when you reach Nisab.`;
     }
@@ -180,7 +186,9 @@ export default function PayZakatPage() {
                     <div className="text-xs text-black/60">Remaining Due This Cycle</div>
                     <div className="text-2xl font-semibold text-[#065F46]">{formatCurrency(summary?.remainingDue ?? 0)}</div>
                   </div>
-                  {summary?.belowNisab === true ? (
+                  {summary?.hasPendingPayment ? (
+                    <Badge variant="warning">Pending Approval</Badge>
+                  ) : summary?.belowNisab === true ? (
                     <Badge variant="warning">Below Nisab</Badge>
                   ) : summary?.remainingDue && Number(summary.remainingDue) <= 0 ? (
                     <Badge variant="secondary">Fulfilled</Badge>
@@ -248,9 +256,15 @@ export default function PayZakatPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-black/90">Paid This Cycle</div>
+                  <div className="text-sm font-medium text-black/90">Approved This Cycle</div>
                   <div className="text-sm font-semibold text-black">
                     {summary?.paidThisCycle ? formatCurrency(summary.paidThisCycle) : formatCurrency(0)}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-black/90">Pending Approval</div>
+                  <div className="text-sm font-semibold text-black">
+                    {summary?.pendingThisCycle ? formatCurrency(summary.pendingThisCycle) : formatCurrency(0)}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-3">
@@ -261,7 +275,9 @@ export default function PayZakatPage() {
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-medium text-black/90">Status</div>
-                  {summary?.belowNisab === true ? (
+                  {summary?.hasPendingPayment ? (
+                    <Badge variant="warning">Pending Approval</Badge>
+                  ) : summary?.belowNisab === true ? (
                     <Badge variant="warning">Below Nisab</Badge>
                   ) : summary?.remainingDue && Number(summary.remainingDue) <= 0 ? (
                     <Badge variant="secondary">Fulfilled This Cycle</Badge>
@@ -422,30 +438,30 @@ export default function PayZakatPage() {
                 <DialogTitle>Payment Submitted (Pending Approval)</DialogTitle>
                 <DialogDescription>Admin will review and finalize your zakat payment.</DialogDescription>
               </DialogHeader>
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="flex items-center justify-between">
+              <div className="mt-4 space-y-3 text-sm text-[#1a2332]">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">User</div>
-                  <div className="font-medium">{receipt.user?.name}</div>
+                  <div className="font-medium text-[#1a2332]">{receipt.user?.name ?? "—"}</div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">Payment ID</div>
-                  <div className="font-medium">{receipt.paymentId}</div>
+                  <div className="font-medium text-[#1a2332]">{receipt.paymentId}</div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">Zakat Amount</div>
-                  <div className="font-medium">{formatCurrency(receipt.amount)}</div>
+                  <div className="font-medium text-[#1a2332]">{formatCurrency(receipt.amount)}</div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">Zakat Type</div>
-                  <div className="font-medium">{receipt.zakatType}</div>
+                  <div className="font-medium text-[#1a2332]">{receipt.zakatType}</div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">Date</div>
-                  <div className="font-medium">{new Date(receipt.date).toLocaleString()}</div>
+                  <div className="font-medium text-[#1a2332]">{new Date(receipt.date).toLocaleString()}</div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="text-black/80">Nisab Value</div>
-                  <div className="font-medium">{formatCurrency(receipt.nisabValue)}</div>
+                  <div className="font-medium text-[#1a2332]">{formatCurrency(receipt.nisabValue)}</div>
                 </div>
               </div>
               <div className="mt-5">

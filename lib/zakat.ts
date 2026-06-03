@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { Prisma } from "@prisma/client";
+import { committedThisCycle, getCyclePaymentTotals } from "./zakat-cycle";
 
 async function getNisabValueWithTx(tx: Prisma.TransactionClient) {
   const rows = await tx.$queryRawUnsafe<Array<{ nisab_value: number | string }>>(
@@ -52,19 +53,14 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
     // Zakat due is always computed from total wealth (account balance).
     // User-entered amount is only the amount they want to pay (full or partial).
     const recommendedZakat = accountBalance.mul(rate).toDecimalPlaces(2);
-    const paidRows = await tx.$queryRawUnsafe<Array<{ paid: number | string }>>(
-      `SELECT COALESCE(SUM(amount), 0) AS paid
-       FROM zakat_payments
-       WHERE user_id = ?
-         AND account_id = ?
-         AND status = 'APPROVED'
-         AND approved_at >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND approved_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-01-01'), INTERVAL 1 YEAR)`,
-      input.userId,
-      donorAccount.id,
-    );
-    const paidThisCycle = new Prisma.Decimal(paidRows[0]?.paid ?? 0);
-    const remainingDue = Prisma.Decimal.max(recommendedZakat.minus(paidThisCycle), new Prisma.Decimal(0));
+    const cycleTotals = await getCyclePaymentTotals(tx, input.userId, donorAccount.id);
+
+    if (cycleTotals.pendingPayment) {
+      throw new Error("You already have a zakat payment pending admin approval");
+    }
+
+    const committed = committedThisCycle(cycleTotals);
+    const remainingDue = Prisma.Decimal.max(recommendedZakat.minus(committed), new Prisma.Decimal(0));
     if (remainingDue.lte(0)) {
       throw new Error("Zakat for this cycle is already fulfilled");
     }

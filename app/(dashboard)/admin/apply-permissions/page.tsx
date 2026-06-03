@@ -18,22 +18,23 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  allPermissionsInModules,
+  filterModulesByApp,
+  formatModuleLabel,
+  formatPermissionLabel,
+  groupPermissionsByModule,
+  moduleFilterOptions,
+  type PermissionAssignItem,
+} from "@/lib/permission-ui";
 
 type Mode = "GROUP_PERMISSIONS" | "USER_ASSIGN";
-type PermissionItem = { id: number; codename: string; name: string; enabled: boolean };
 type UserAssignType = "USER" | "GROUP";
 
 function modeFromQuery(value: string | null): Mode {
   if (value === "GROUP_PERMISSIONS" || value === "USER_ASSIGN") return value;
   return "USER_ASSIGN";
-}
-
-function toLabel(input: string) {
-  return input
-    .toLowerCase()
-    .split("_")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(" ");
 }
 
 export default function ApplyPermissionsPage() {
@@ -76,10 +77,12 @@ export default function ApplyPermissionsPage() {
     if (qm === "GROUP_PERMISSIONS" && Number.isFinite(qg) && qg > 0) setSelectedGroupId(qg);
   }, [searchParams]);
 
-  const { data: permissions, refetch: refetchPermissions } = useGetUserPermissionsQuery(
-    { userId: selectedUserId ?? 0 },
-    { skip: !selectedUserId },
-  );
+  const {
+    data: permissions,
+    refetch: refetchPermissions,
+    isFetching: permissionsLoading,
+    isError: permissionsError,
+  } = useGetUserPermissionsQuery({ userId: selectedUserId ?? 0 }, { skip: !selectedUserId });
   const { data: groups, refetch: refetchGroups } = useGetUserGroupsQuery(
     { userId: selectedUserId ?? 0 },
     { skip: !selectedUserId },
@@ -87,10 +90,12 @@ export default function ApplyPermissionsPage() {
   const [saveUserPermissions, { isLoading: savingUserPermissions }] = useUpdateUserPermissionsMutation();
   const [saveUserGroups, { isLoading: savingUserGroups }] = useUpdateUserGroupsMutation();
   const [saveGroupPermissions, { isLoading: savingGroupPermissions }] = useUpdateGroupPermissionsMutation();
-  const { data: groupPermissions, refetch: refetchGroupPermissions } = useGetGroupPermissionsQuery(
-    { groupId: selectedGroupId ?? 0 },
-    { skip: !selectedGroupId },
-  );
+  const {
+    data: groupPermissions,
+    refetch: refetchGroupPermissions,
+    isFetching: groupPermissionsLoading,
+    isError: groupPermissionsError,
+  } = useGetGroupPermissionsQuery({ groupId: selectedGroupId ?? 0 }, { skip: !selectedGroupId });
 
   React.useEffect(() => {
     if (!groupPermissions) return;
@@ -120,33 +125,12 @@ export default function ApplyPermissionsPage() {
     setUserGroupMap(next);
   }, [groups]);
 
-  const crudGrouped = React.useMemo(() => {
-    const map = new Map<
-      string,
-      { resource: string; ADD?: PermissionItem; VIEW?: PermissionItem; EDIT?: PermissionItem; DELETE?: PermissionItem }
-    >();
-    const others: PermissionItem[] = [];
-    for (const p of (groupPermissions ?? []) as PermissionItem[]) {
-      const parts = p.codename.split("_");
-      if (parts.length < 2) {
-        others.push(p);
-        continue;
-      }
-      const action = parts[parts.length - 1] as "ADD" | "VIEW" | "EDIT" | "DELETE";
-      const valid = action === "ADD" || action === "VIEW" || action === "EDIT" || action === "DELETE";
-      if (!valid) {
-        others.push(p);
-        continue;
-      }
-      const resource = parts.slice(0, -1).join("_");
-      if (!map.has(resource)) map.set(resource, { resource });
-      const row = map.get(resource)!;
-      row[action] = p;
-    }
-    const rows = Array.from(map.values()).sort((a, b) => a.resource.localeCompare(b.resource));
-    const apps = ["ALL", ...Array.from(new Set(rows.map((r) => r.resource.split("_")[0]))).sort()];
-    const filteredRows = appsFilter === "ALL" ? rows : rows.filter((r) => r.resource.startsWith(`${appsFilter}_`) || r.resource === appsFilter);
-    return { rows: filteredRows, others, apps };
+  const groupPermissionModules = React.useMemo(() => {
+    const modules = groupPermissionsByModule((groupPermissions ?? []) as PermissionAssignItem[]);
+    return {
+      modules: filterModulesByApp(modules, appsFilter),
+      apps: moduleFilterOptions(modules),
+    };
   }, [groupPermissions, appsFilter]);
 
   const filteredUsers = React.useMemo(() => users?.items ?? [], [users]);
@@ -163,34 +147,22 @@ export default function ApplyPermissionsPage() {
     [groupsWithPermissions, selectedGroupId],
   );
 
-  const userCrudGrouped = React.useMemo(() => {
-    const map = new Map<
-      string,
-      { resource: string; ADD?: PermissionItem; VIEW?: PermissionItem; EDIT?: PermissionItem; DELETE?: PermissionItem }
-    >();
-    const others: PermissionItem[] = [];
-    for (const p of (permissions ?? []) as PermissionItem[]) {
-      const parts = p.codename.split("_");
-      if (parts.length < 2) {
-        others.push(p);
-        continue;
-      }
-      const action = parts[parts.length - 1] as "ADD" | "VIEW" | "EDIT" | "DELETE";
-      const valid = action === "ADD" || action === "VIEW" || action === "EDIT" || action === "DELETE";
-      if (!valid) {
-        others.push(p);
-        continue;
-      }
-      const resource = parts.slice(0, -1).join("_");
-      if (!map.has(resource)) map.set(resource, { resource });
-      const row = map.get(resource)!;
-      row[action] = p;
-    }
-    const rows = Array.from(map.values()).sort((a, b) => a.resource.localeCompare(b.resource));
-    const apps = ["ALL", ...Array.from(new Set(rows.map((r) => r.resource.split("_")[0]))).sort()];
-    const filteredRows = appsFilter === "ALL" ? rows : rows.filter((r) => r.resource.startsWith(`${appsFilter}_`) || r.resource === appsFilter);
-    return { rows: filteredRows, others, apps };
+  const userPermissionModules = React.useMemo(() => {
+    const modules = groupPermissionsByModule((permissions ?? []) as PermissionAssignItem[]);
+    return {
+      modules: filterModulesByApp(modules, appsFilter),
+      apps: moduleFilterOptions(modules),
+    };
   }, [permissions, appsFilter]);
+
+  const userPermissionsFlat = React.useMemo(
+    () => allPermissionsInModules(userPermissionModules.modules),
+    [userPermissionModules.modules],
+  );
+  const groupPermissionsFlat = React.useMemo(
+    () => allPermissionsInModules(groupPermissionModules.modules),
+    [groupPermissionModules.modules],
+  );
 
   React.useEffect(() => {
     if (!selectedUserId && filteredUsers.length) setSelectedUserId(filteredUsers[0].id);
@@ -291,9 +263,9 @@ export default function ApplyPermissionsPage() {
                       onChange={(e) => setAppsFilter(e.target.value)}
                       className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20"
                     >
-                      {userCrudGrouped.apps.map((app) => (
+                      {userPermissionModules.apps.map((app) => (
                         <option key={app} value={app}>
-                          {toLabel(app)}
+                          {formatModuleLabel(app)}
                         </option>
                       ))}
                     </select>
@@ -318,70 +290,71 @@ export default function ApplyPermissionsPage() {
               </div>
 
               {assignType === "USER" ? (
-                <div className="space-y-4 pr-1">
-                  <div className="flex items-center justify-between rounded-md bg-black/[0.03] px-3 py-2 text-sm text-black">
-                    <span className="font-medium">Check all of the models</span>
-                    <Switch
-                      checked={userCrudGrouped.rows.every((r) =>
-                        ["ADD", "VIEW", "EDIT", "DELETE"].every((a) => {
-                          const perm = r[a as "ADD" | "VIEW" | "EDIT" | "DELETE"];
-                          return !perm || Boolean(userPermissionMap[perm.id]);
-                        }),
-                      )}
-                      onCheckedChange={(checked) => {
-                        setUserPermissionMap((prev) => {
-                          const next = { ...prev };
-                          userCrudGrouped.rows.forEach((r) => {
-                            ["ADD", "VIEW", "EDIT", "DELETE"].forEach((a) => {
-                              const perm = r[a as "ADD" | "VIEW" | "EDIT" | "DELETE"];
-                              if (perm) next[perm.id] = checked;
+                <div className="max-h-[min(62vh,640px)] space-y-4 overflow-y-auto pr-1">
+                  {!selectedUserId ? (
+                    <div className="rounded-md border border-black/10 bg-white px-4 py-8 text-center text-sm text-black/60">
+                      Select a user from the list to assign permissions.
+                    </div>
+                  ) : permissionsLoading ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-24 w-full" />
+                      <Skeleton className="h-24 w-full" />
+                    </div>
+                  ) : permissionsError ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                      Could not load permissions. Ensure your account has permission to manage users.
+                    </div>
+                  ) : userPermissionsFlat.length === 0 ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      No permissions found in the system. Run <span className="font-mono">npm run db:seed</span> to create default permissions.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between rounded-md bg-black/[0.03] px-3 py-2 text-sm text-black">
+                        <span className="font-medium">Check all of the models</span>
+                        <Switch
+                          checked={
+                            userPermissionsFlat.length > 0 &&
+                            userPermissionsFlat.every((p) => Boolean(userPermissionMap[p.id]))
+                          }
+                          onCheckedChange={(checked) => {
+                            setUserPermissionMap((prev) => {
+                              const next = { ...prev };
+                              userPermissionsFlat.forEach((p) => {
+                                next[p.id] = checked;
+                              });
+                              return next;
                             });
-                          });
-                          return next;
-                        });
-                      }}
-                    />
-                  </div>
-                  {userCrudGrouped.rows.map((row) => (
-                    <div key={row.resource} className="rounded-md border border-black/10">
-                      <div className="border-b border-black/10 bg-black/[0.04] px-3 py-2 font-semibold text-black">{toLabel(row.resource)}</div>
-                      <div className="grid gap-3 p-3 md:grid-cols-2">
-                        {(["ADD", "EDIT", "DELETE", "VIEW"] as const).map((action) => {
-                          const perm = row[action];
-                          if (!perm) return <div key={action} />;
-                          return (
-                            <label key={perm.id} className="flex items-center justify-between rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black">
-                              <span>Can {action.toLowerCase()} {toLabel(row.resource)}</span>
-                              <Switch
-                                checked={Boolean(userPermissionMap[perm.id])}
-                                onCheckedChange={(checked) => {
-                                  setUserPermissionMap((prev) => ({ ...prev, [perm.id]: checked }));
-                                }}
-                              />
-                            </label>
-                          );
-                        })}
+                          }}
+                        />
                       </div>
-                    </div>
-                  ))}
-                  {userCrudGrouped.others.length ? (
-                    <div className="rounded-md border border-black/10">
-                      <div className="border-b border-black/10 bg-black/[0.02] px-3 py-2 font-semibold">Other Permissions</div>
-                      <div className="grid gap-2 p-3 md:grid-cols-2">
-                        {userCrudGrouped.others.map((p) => (
-                          <label key={p.id} className="flex items-center justify-between rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black">
-                            <span>{p.name}</span>
-                            <Switch
-                              checked={Boolean(userPermissionMap[p.id])}
-                              onCheckedChange={(checked) => {
-                                setUserPermissionMap((prev) => ({ ...prev, [p.id]: checked }));
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+                      {userPermissionModules.modules.map((mod) => (
+                        <div key={mod.module} className="rounded-md border border-black/10">
+                          <div className="border-b border-black/10 bg-black/[0.04] px-3 py-2 font-semibold text-black">{mod.label}</div>
+                          <div className="grid gap-2 p-3 md:grid-cols-2">
+                            {mod.items.map((p) => (
+                              <label
+                                key={p.id}
+                                className="flex items-center justify-between gap-3 rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block font-medium">{formatPermissionLabel(p.codename, p.name)}</span>
+                                  <span className="block font-mono text-[11px] text-black/50">{p.codename}</span>
+                                </span>
+                                <Switch
+                                  checked={Boolean(userPermissionMap[p.id])}
+                                  onCheckedChange={(checked) => {
+                                    setUserPermissionMap((prev) => ({ ...prev, [p.id]: checked }));
+                                  }}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -479,9 +452,9 @@ export default function ApplyPermissionsPage() {
                   onChange={(e) => setAppsFilter(e.target.value)}
                   className="h-10 rounded-md border border-black/10 bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20"
                 >
-                  {crudGrouped.apps.map((app) => (
+                  {groupPermissionModules.apps.map((app) => (
                     <option key={app} value={app}>
-                      {toLabel(app)}
+                      {formatModuleLabel(app)}
                     </option>
                   ))}
                 </select>
@@ -508,71 +481,68 @@ export default function ApplyPermissionsPage() {
               </div>
             </div>
 
-            <div className="mb-3 flex items-center justify-between rounded-md bg-black/[0.03] px-3 py-2 text-sm text-black">
-              <span className="font-medium">Check all of the models</span>
-              <Switch
-                checked={crudGrouped.rows.every((r) => ["ADD", "VIEW", "EDIT", "DELETE"].every((a) => {
-                  const perm = r[a as "ADD" | "VIEW" | "EDIT" | "DELETE"];
-                  return !perm || Boolean(groupPermissionMap[perm.id]);
-                }))}
-                onCheckedChange={(checked) => {
-                  setGroupPermissionMap((prev) => {
-                    const next = { ...prev };
-                    crudGrouped.rows.forEach((r) => {
-                      ["ADD", "VIEW", "EDIT", "DELETE"].forEach((a) => {
-                        const perm = r[a as "ADD" | "VIEW" | "EDIT" | "DELETE"];
-                        if (perm) next[perm.id] = checked;
+            {groupPermissionsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            ) : groupPermissionsError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                Could not load group permissions.
+              </div>
+            ) : groupPermissionsFlat.length === 0 ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                No permissions found. Run <span className="font-mono">npm run db:seed</span> first.
+              </div>
+            ) : (
+              <>
+                <div className="mb-3 flex items-center justify-between rounded-md bg-black/[0.03] px-3 py-2 text-sm text-black">
+                  <span className="font-medium">Check all of the models</span>
+                  <Switch
+                    checked={
+                      groupPermissionsFlat.length > 0 &&
+                      groupPermissionsFlat.every((p) => Boolean(groupPermissionMap[p.id]))
+                    }
+                    onCheckedChange={(checked) => {
+                      setGroupPermissionMap((prev) => {
+                        const next = { ...prev };
+                        groupPermissionsFlat.forEach((p) => {
+                          next[p.id] = checked;
+                        });
+                        return next;
                       });
-                    });
-                    return next;
-                  });
-                }}
-              />
-            </div>
-
-            <div className="space-y-4">
-              {crudGrouped.rows.map((row) => (
-                <div key={row.resource} className="rounded-md border border-black/10">
-                  <div className="border-b border-black/10 bg-black/[0.04] px-3 py-2 font-semibold text-black">{toLabel(row.resource)}</div>
-                  <div className="grid gap-3 p-3 md:grid-cols-2">
-                    {(["ADD", "EDIT", "DELETE", "VIEW"] as const).map((action) => {
-                      const perm = row[action];
-                      if (!perm) return <div key={action} />;
-                      return (
-                        <label key={perm.id} className="flex items-center justify-between rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black">
-                          <span>Can {action.toLowerCase()} {toLabel(row.resource).replace(/\s+/g, " ")}</span>
-                          <Switch
-                            checked={Boolean(groupPermissionMap[perm.id])}
-                            onCheckedChange={(checked) => {
-                              setGroupPermissionMap((prev) => ({ ...prev, [perm.id]: checked }));
-                            }}
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
+                    }}
+                  />
                 </div>
-              ))}
-            </div>
 
-            {crudGrouped.others.length ? (
-              <div className="mt-4 rounded-md border border-black/10">
-                <div className="border-b border-black/10 bg-black/[0.02] px-3 py-2 font-semibold">Other Permissions</div>
-                <div className="grid gap-2 p-3 md:grid-cols-2">
-                  {crudGrouped.others.map((p) => (
-                    <label key={p.id} className="flex items-center justify-between rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black">
-                      <span>{p.name}</span>
-                      <Switch
-                        checked={Boolean(groupPermissionMap[p.id])}
-                        onCheckedChange={(checked) => {
-                          setGroupPermissionMap((prev) => ({ ...prev, [p.id]: checked }));
-                        }}
-                      />
-                    </label>
+                <div className="max-h-[min(62vh,640px)] space-y-4 overflow-y-auto">
+                  {groupPermissionModules.modules.map((mod) => (
+                    <div key={mod.module} className="rounded-md border border-black/10">
+                      <div className="border-b border-black/10 bg-black/[0.04] px-3 py-2 font-semibold text-black">{mod.label}</div>
+                      <div className="grid gap-2 p-3 md:grid-cols-2">
+                        {mod.items.map((p) => (
+                          <label
+                            key={p.id}
+                            className="flex items-center justify-between gap-3 rounded-md border border-black/10 bg-white px-3 py-2 text-sm text-black"
+                          >
+                            <span className="min-w-0">
+                              <span className="block font-medium">{formatPermissionLabel(p.codename, p.name)}</span>
+                              <span className="block font-mono text-[11px] text-black/50">{p.codename}</span>
+                            </span>
+                            <Switch
+                              checked={Boolean(groupPermissionMap[p.id])}
+                              onCheckedChange={(checked) => {
+                                setGroupPermissionMap((prev) => ({ ...prev, [p.id]: checked }));
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              </>
+            )}
           </CardContent>
         </Card>
       ) : null}

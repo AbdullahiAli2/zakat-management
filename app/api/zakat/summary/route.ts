@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { committedThisCycle, getCyclePaymentTotals } from "@/lib/zakat-cycle";
 import { readJwtFromRequest, verifySessionJwt } from "@/lib/auth";
 import { validationErrorBody } from "@/lib/validation-messages";
 import { parseRequestBody, isZodError, zodErrorBody } from "@/lib/parse-request";
@@ -27,6 +28,8 @@ export async function GET(req: NextRequest) {
 
   let wealthBase: Prisma.Decimal | null = null;
   let paidThisCycle: Prisma.Decimal | null = null;
+  let pendingThisCycle: Prisma.Decimal | null = null;
+  let hasPendingPayment = false;
 
   if (parsed.data.accountId) {
     const token = readJwtFromRequest(req);
@@ -44,21 +47,14 @@ export async function GET(req: NextRequest) {
     }
     wealthBase = new Prisma.Decimal(account.balance);
 
-    const paidRows = await prisma.$queryRawUnsafe<Array<{ paid: number | string }>>(
-      `SELECT COALESCE(SUM(amount), 0) AS paid
-       FROM zakat_payments
-       WHERE user_id = ?
-         AND account_id = ?
-         AND status = 'APPROVED'
-         AND approved_at >= DATE_FORMAT(CURDATE(), '%Y-01-01')
-         AND approved_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-01-01'), INTERVAL 1 YEAR)`,
-      session.userId,
-      parsed.data.accountId,
-    );
-    paidThisCycle = new Prisma.Decimal(paidRows[0]?.paid ?? 0);
+    const cycleTotals = await getCyclePaymentTotals(prisma, session.userId, parsed.data.accountId);
+    paidThisCycle = cycleTotals.approvedPaid;
+    pendingThisCycle = cycleTotals.pendingPaid;
+    hasPendingPayment = cycleTotals.pendingPayment !== null;
   } else if (typeof parsed.data.amount === "number") {
     wealthBase = new Prisma.Decimal(parsed.data.amount);
     paidThisCycle = new Prisma.Decimal(0);
+    pendingThisCycle = new Prisma.Decimal(0);
   }
 
   const belowNisab = wealthBase && nisabValue.gt(0) ? wealthBase.lt(nisabValue) : null;
@@ -68,12 +64,18 @@ export async function GET(req: NextRequest) {
       : wealthBase
         ? new Prisma.Decimal(0)
         : null;
+  const committed =
+    calculatedZakat && paidThisCycle !== null && pendingThisCycle !== null
+      ? committedThisCycle({ approvedPaid: paidThisCycle, pendingPaid: pendingThisCycle, pendingPayment: null })
+      : null;
   const remainingDue =
-    calculatedZakat && paidThisCycle ? Prisma.Decimal.max(calculatedZakat.minus(paidThisCycle), new Prisma.Decimal(0)) : null;
+    calculatedZakat && committed !== null
+      ? Prisma.Decimal.max(calculatedZakat.minus(committed), new Prisma.Decimal(0))
+      : null;
   const zakatDue =
     belowNisab === null || remainingDue === null
       ? null
-      : !belowNisab && remainingDue.gt(0);
+      : !belowNisab && remainingDue.gt(0) && !hasPendingPayment;
 
   return NextResponse.json({
     ok: true,
@@ -84,6 +86,8 @@ export async function GET(req: NextRequest) {
       rate: rate.toString(),
       calculatedZakat: calculatedZakat?.toString() ?? null,
       paidThisCycle: paidThisCycle?.toString() ?? null,
+      pendingThisCycle: pendingThisCycle?.toString() ?? null,
+      hasPendingPayment,
       remainingDue: remainingDue?.toString() ?? null,
       belowNisab,
       zakatDue,

@@ -181,7 +181,9 @@ export default function AdminAuditPage() {
               </div>
               <div className="mt-4">
                 <div className="text-sm text-black/60">Action</div>
-                <div className="mt-1 rounded-lg bg-black/[0.03] p-3 font-medium text-black">{selected.action}</div>
+                <div className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/[0.03] p-3 font-medium text-black">
+                  {selected.action}
+                </div>
               </div>
               <div className="mt-4">
                 <div className="text-sm text-black/60">System Information</div>

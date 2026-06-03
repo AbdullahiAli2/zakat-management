@@ -25,7 +25,12 @@ export async function GET(req: NextRequest) {
     const raw = Object.fromEntries(req.nextUrl.searchParams.entries());
     const parsed = querySchema.parse(raw);
 
-    const whereParts: string[] = [];
+    // Audit trail = user actions only (no legacy API error / stack rows).
+    const whereParts: string[] = [
+      "(a.module IS NULL OR a.module <> 'system')",
+      "(a.action IS NULL OR (a.action <> 'ERROR' AND a.action NOT LIKE 'ERROR:%'))",
+      "(a.module IS NULL OR (a.module NOT LIKE 'Error:%' AND CHAR_LENGTH(a.module) < 300))",
+    ];
     const params: Array<string> = [];
     if (parsed.module) {
       whereParts.push("a.module = ?");
@@ -75,7 +80,11 @@ export async function GET(req: NextRequest) {
     );
 
     const modules = await prisma.$queryRawUnsafe<Array<{ module: string | null }>>(
-      "SELECT DISTINCT module FROM audits WHERE module IS NOT NULL ORDER BY module ASC",
+      `SELECT DISTINCT module FROM audits a
+       WHERE module IS NOT NULL
+         AND a.module <> 'system'
+         AND CHAR_LENGTH(a.module) < 300
+       ORDER BY module ASC`,
     );
 
     return NextResponse.json({
