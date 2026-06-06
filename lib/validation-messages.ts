@@ -75,6 +75,7 @@ type ZodIssue = ZodError["issues"][number];
 
 function friendlyIssueMessage(issue: ZodIssue): string {
   const label = fieldLabel(issue.path);
+  const fieldKey = String(issue.path[0] ?? "");
   const custom = issue.message?.trim();
 
   if (custom && !/^too small|^too big|^invalid |^expected /i.test(custom)) {
@@ -82,6 +83,14 @@ function friendlyIssueMessage(issue: ZodIssue): string {
   }
 
   const code = issue.code as string;
+
+  if (fieldKey === "age" && code === "too_big") {
+    return "This isn't a valid age.";
+  }
+
+  if (fieldKey === "age" && code === "too_small") {
+    return "Age must be at least 1.";
+  }
 
   if (code === "too_small") {
     const min = "minimum" in issue ? issue.minimum : undefined;

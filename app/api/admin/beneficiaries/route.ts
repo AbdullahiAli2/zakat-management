@@ -13,7 +13,7 @@ const createSchema = z.object({
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
   phone: z.string().max(50).optional(),
-  gender: z.enum(["MALE", "FEMALE"]).optional(),
+  gender: z.enum(["male", "female"]).optional(),
   category: z.enum(BENEFICIARY_CATEGORIES),
   nationalId: z.string().max(100).optional(),
   familySize: z.coerce.number().int().positive().optional(),

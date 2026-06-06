@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ArrowRight, BadgeCheck, Eye, EyeOff, Lock, Mail, UserRound } from "lucide-react";
-import { registerSchema } from "@/lib/validation";
+import { MAX_HUMAN_AGE, MIN_HUMAN_AGE, registerSchema } from "@/lib/validation";
 import { formatZodFieldErrors, toastFetchError, toastZodError } from "@/lib/client-errors";
 
 export default function RegisterPage() {
@@ -32,7 +32,7 @@ export default function RegisterPage() {
   const [password, setPassword] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [age, setAge] = React.useState("");
-  const [gender, setGender] = React.useState<"" | "MALE" | "FEMALE">("");
+  const [gender, setGender] = React.useState<"" | "male" | "female">("");
   const [country, setCountry] = React.useState("");
   const [city, setCity] = React.useState("");
   const [address, setAddress] = React.useState("");
@@ -227,10 +227,19 @@ export default function RegisterPage() {
                 </div>
                 <div className="space-y-1">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-black/70">Age</div>
-                  <Input className="bg-white text-black" type="number" value={age} onChange={(e) => {
-                    setAge(e.target.value);
-                    setErrors((prev) => ({ ...prev, age: "" }));
-                  }} placeholder="Age" autoComplete="off" />
+                  <Input
+                    className="bg-white text-black"
+                    type="number"
+                    min={MIN_HUMAN_AGE}
+                    max={MAX_HUMAN_AGE}
+                    value={age}
+                    onChange={(e) => {
+                      setAge(e.target.value);
+                      setErrors((prev) => ({ ...prev, age: "" }));
+                    }}
+                    placeholder="Age"
+                    autoComplete="off"
+                  />
                   {errors.age ? <div className="text-xs text-red-600">{errors.age}</div> : null}
                 </div>
               </div>
@@ -242,13 +251,13 @@ export default function RegisterPage() {
                     className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20"
                     value={gender}
                     onChange={(e) => {
-                      setGender((e.target.value as "MALE" | "FEMALE" | "") ?? "");
+                      setGender((e.target.value as "male" | "female" | "") ?? "");
                       setErrors((prev) => ({ ...prev, gender: "" }));
                     }}
                   >
                     <option value="">Select gender</option>
-                    <option value="MALE">MALE</option>
-                    <option value="FEMALE">FEMALE</option>
+                    <option value="male">male</option>
+                    <option value="female">female</option>
                   </select>
                   {errors.gender ? <div className="text-xs text-red-600">{errors.gender}</div> : null}
                 </div>

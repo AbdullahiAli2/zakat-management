@@ -15,7 +15,7 @@ async function main() {
         password: passwordHash,
         phone: "617465218",
         age: 24,
-        gender: "MALE",
+        gender: "male",
         country: "Somalia",
         city: "Mogadishu",
         address: "Howl wdg",

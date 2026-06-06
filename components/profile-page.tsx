@@ -11,7 +11,8 @@ import { ChangePasswordModal } from "@/components/change-password-modal";
 import { toast } from "sonner";
 import { CalendarDays, KeyRound } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
-import { toastFetchError } from "@/lib/client-errors";
+import { formatZodFieldErrors, toastFetchError, toastZodError } from "@/lib/client-errors";
+import { MAX_HUMAN_AGE, MIN_HUMAN_AGE, profileUpdateSchema } from "@/lib/validation";
 
 type ProfileResponse = {
   id: number;
@@ -23,7 +24,7 @@ type ProfileResponse = {
   avatarUrl: string | null;
   phone: string | null;
   age: number | null;
-  gender: "MALE" | "FEMALE" | null;
+  gender: "male" | "female" | null;
   country: string | null;
   city: string | null;
   address: string | null;
@@ -44,11 +45,12 @@ export function ProfilePage() {
   const [lastName, setLastName] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [age, setAge] = React.useState("");
-  const [gender, setGender] = React.useState<"MALE" | "FEMALE" | "">("");
+  const [gender, setGender] = React.useState<"male" | "female" | "">("");
   const [country, setCountry] = React.useState("");
   const [city, setCity] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [passwordOpen, setPasswordOpen] = React.useState(false);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   function openPasswordModal() {
     setPasswordOpen(true);
@@ -90,25 +92,37 @@ export function ProfilePage() {
 
   async function onSaveProfile(e: React.FormEvent) {
     e.preventDefault();
+    const parsed = profileUpdateSchema.safeParse({
+      firstName,
+      lastName,
+      phone,
+      age: age ? Number(age) : undefined,
+      gender: gender || undefined,
+      country,
+      city,
+      address,
+    });
+    if (!parsed.success) {
+      const nextErrors = formatZodFieldErrors(parsed.error);
+      setErrors(nextErrors);
+      toastZodError(parsed.error);
+      return;
+    }
+    setErrors({});
     setSavingProfile(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          phone,
-          age: age ? Number(age) : undefined,
-          gender: gender || undefined,
-          country,
-          city,
-          address,
-        }),
+        body: JSON.stringify(parsed.data),
       });
       const json = (await res.json()) as { ok: boolean; error?: string; fieldErrors?: Record<string, string>; data?: ProfileResponse };
       if (!res.ok || !json.ok) {
+        const apiFieldErrors = (json.fieldErrors ?? {}) as Record<string, string>;
+        if (Object.keys(apiFieldErrors).length > 0) {
+          setErrors(apiFieldErrors);
+        }
         toastFetchError(json, "Failed to update profile");
         return;
       }
@@ -259,18 +273,28 @@ export function ProfilePage() {
                   </div>
                   <div className="space-y-1.5">
                     <div className="text-xs font-semibold uppercase text-black/50">Age</div>
-                    <Input type="number" value={age} onChange={(e) => setAge(e.target.value)} />
+                    <Input
+                      type="number"
+                      min={MIN_HUMAN_AGE}
+                      max={MAX_HUMAN_AGE}
+                      value={age}
+                      onChange={(e) => {
+                        setAge(e.target.value);
+                        setErrors((prev) => ({ ...prev, age: "" }));
+                      }}
+                    />
+                    {errors.age ? <div className="text-xs text-red-600">{errors.age}</div> : null}
                   </div>
                   <div className="space-y-1.5">
                     <div className="text-xs font-semibold uppercase text-black/50">Gender</div>
                     <select
                       className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20"
                       value={gender}
-                      onChange={(e) => setGender(e.target.value as "MALE" | "FEMALE" | "")}
+                      onChange={(e) => setGender(e.target.value as "male" | "female" | "")}
                     >
                       <option value="">Select gender</option>
-                      <option value="MALE">MALE</option>
-                      <option value="FEMALE">FEMALE</option>
+                      <option value="male">male</option>
+                      <option value="female">female</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">

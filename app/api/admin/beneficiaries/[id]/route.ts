@@ -14,7 +14,7 @@ const updateSchema = z
     firstName: z.string().max(100).optional(),
     lastName: z.string().max(100).optional(),
     phone: z.string().max(50).optional(),
-    gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
+    gender: z.enum(["male", "female"]).nullable().optional(),
     category: z.enum(BENEFICIARY_CATEGORIES).optional(),
     nationalId: z.string().max(100).nullable().optional(),
     familySize: z.coerce.number().int().positive().nullable().optional(),

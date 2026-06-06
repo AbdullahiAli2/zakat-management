@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeModal } from "@/components/common/fade-modal";
 import { Eye, EyeOff, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { ageNumberSchema, MAX_HUMAN_AGE, MIN_HUMAN_AGE } from "@/lib/validation";
 
 const roleValues = ["SUPERUSER", "ADMIN", "DONOR"] as const;
 const createSchema = z.object({
@@ -29,8 +30,8 @@ const createSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(4, "Phone is required"),
-  age: z.number().int().min(1, "Age is required").max(120, "Age must be less than 121"),
-  gender: z.enum(["MALE", "FEMALE"]),
+  age: ageNumberSchema,
+  gender: z.enum(["male", "female"]),
   country: z.string().min(2, "Country is required"),
   city: z.string().min(2, "City is required"),
   address: z.string().min(2, "Address is required"),
@@ -42,8 +43,8 @@ const editSchema = z.object({
   lastName: z.string().min(2, "Last name is required"),
   email: z.string().email("Enter a valid email address"),
   phone: z.string().min(4, "Phone is required"),
-  age: z.number().int().min(1, "Age is required").max(120, "Age must be less than 121"),
-  gender: z.enum(["MALE", "FEMALE"]),
+  age: ageNumberSchema,
+  gender: z.enum(["male", "female"]),
   country: z.string().min(2, "Country is required"),
   city: z.string().min(2, "City is required"),
   address: z.string().min(2, "Address is required"),
@@ -96,7 +97,7 @@ export default function AdminUsersPage() {
       password: "",
       phone: "",
       age: 18,
-      gender: "MALE",
+      gender: "male",
       country: "",
       city: "",
       address: "",
@@ -106,7 +107,7 @@ export default function AdminUsersPage() {
   });
   const editForm = useForm<z.infer<typeof editSchema>>({
     resolver: zodResolver(editSchema),
-    defaultValues: { firstName: "", lastName: "", email: "", phone: "", age: 18, gender: "MALE", country: "", city: "", address: "", role: "DONOR", isActive: true },
+    defaultValues: { firstName: "", lastName: "", email: "", phone: "", age: 18, gender: "male", country: "", city: "", address: "", role: "DONOR", isActive: true },
   });
   const resetForm = useForm<z.infer<typeof resetSchema>>({
     resolver: zodResolver(resetSchema),
@@ -139,7 +140,7 @@ export default function AdminUsersPage() {
         email: editingUser.email,
         phone: editingUser.phone ?? "",
         age: editingUser.age ?? 18,
-        gender: editingUser.gender === "FEMALE" ? "FEMALE" : "MALE",
+        gender: editingUser.gender === "female" ? "female" : "male",
         country: editingUser.country ?? "",
         city: editingUser.city ?? "",
         address: editingUser.address ?? "",
@@ -388,7 +389,7 @@ export default function AdminUsersPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#065F46]">Age *</label>
-                <Input className="bg-white text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]" type="number" placeholder="Enter age" {...createForm.register("age", { valueAsNumber: true })} />
+                <Input className="bg-white text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]" type="number" min={MIN_HUMAN_AGE} max={MAX_HUMAN_AGE} placeholder="Enter age" {...createForm.register("age", { valueAsNumber: true })} />
                 {createForm.formState.errors.age ? <div className="text-xs text-red-600">{createForm.formState.errors.age.message}</div> : null}
               </div>
             </div>
@@ -396,8 +397,8 @@ export default function AdminUsersPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#065F46]">Gender *</label>
                 <select className="h-10 w-full rounded-md border border-[#b5cec4] bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20" {...createForm.register("gender")}>
-                  <option value="MALE">MALE</option>
-                  <option value="FEMALE">FEMALE</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -494,7 +495,7 @@ export default function AdminUsersPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#065F46]">Age *</label>
-                <Input className="bg-white text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]" type="number" placeholder="Enter age" {...editForm.register("age", { valueAsNumber: true })} />
+                <Input className="bg-white text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]" type="number" min={MIN_HUMAN_AGE} max={MAX_HUMAN_AGE} placeholder="Enter age" {...editForm.register("age", { valueAsNumber: true })} />
                 {editForm.formState.errors.age ? <div className="text-xs text-red-600">{editForm.formState.errors.age.message}</div> : null}
               </div>
             </div>
@@ -502,8 +503,8 @@ export default function AdminUsersPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#065F46]">Gender *</label>
                 <select className="h-10 w-full rounded-md border border-[#b5cec4] bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20" {...editForm.register("gender")}>
-                  <option value="MALE">MALE</option>
-                  <option value="FEMALE">FEMALE</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
                 </select>
               </div>
               <div className="space-y-1.5">

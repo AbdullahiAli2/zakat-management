@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
         email: string;
         phone: string | null;
         age: number | null;
-        gender: "MALE" | "FEMALE" | null;
+        gender: "male" | "female" | null;
         country: string | null;
         city: string | null;
         address: string | null;
@@ -122,7 +122,7 @@ export async function PATCH(req: NextRequest) {
         email: string;
         phone: string | null;
         age: number | null;
-        gender: "MALE" | "FEMALE" | null;
+        gender: "male" | "female" | null;
         country: string | null;
         city: string | null;
         address: string | null;

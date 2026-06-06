@@ -423,7 +423,7 @@ export const api = createApi({
           lastName: string | null;
           fullName: string;
           phone: string | null;
-          gender: "MALE" | "FEMALE" | null;
+          gender: "male" | "female" | null;
           category: "POOR" | "ORPHAN" | "WIDOW" | "DISABLED" | "STUDENT" | "EMERGENCY";
           address: string | null;
           nationalId: string | null;
@@ -454,7 +454,7 @@ export const api = createApi({
         firstName?: string;
         lastName?: string;
         phone?: string;
-        gender?: "MALE" | "FEMALE";
+        gender?: "male" | "female";
         category: "POOR" | "ORPHAN" | "WIDOW" | "DISABLED" | "STUDENT" | "EMERGENCY";
         nationalId?: string;
         familySize?: number;
@@ -472,7 +472,7 @@ export const api = createApi({
         firstName?: string;
         lastName?: string;
         phone?: string;
-        gender?: "MALE" | "FEMALE" | null;
+        gender?: "male" | "female" | null;
         category?: "POOR" | "ORPHAN" | "WIDOW" | "DISABLED" | "STUDENT" | "EMERGENCY";
         nationalId?: string | null;
         familySize?: number | null;
@@ -734,7 +734,7 @@ export const api = createApi({
           createdAt: string;
           phone: string | null;
           age: number | null;
-          gender: "MALE" | "FEMALE" | null;
+          gender: "male" | "female" | null;
           country: string | null;
           city: string | null;
           address: string | null;
@@ -774,7 +774,7 @@ export const api = createApi({
         password: string;
         phone: string;
         age: number;
-        gender: "MALE" | "FEMALE";
+        gender: "male" | "female";
         country: string;
         city: string;
         address: string;
@@ -794,7 +794,7 @@ export const api = createApi({
         email?: string;
         phone?: string;
         age?: number;
-        gender?: "MALE" | "FEMALE";
+        gender?: "male" | "female";
         country?: string;
         city?: string;
         address?: string;

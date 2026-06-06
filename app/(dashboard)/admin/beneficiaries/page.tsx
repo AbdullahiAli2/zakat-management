@@ -41,7 +41,7 @@ export default function AdminBeneficiariesPage() {
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [phone, setPhone] = React.useState("");
-  const [gender, setGender] = React.useState<"" | "MALE" | "FEMALE">("");
+  const [gender, setGender] = React.useState<"" | "male" | "female">("");
   const [category, setCategory] = React.useState<(typeof CATEGORIES)[number]>("POOR");
   const [familySize, setFamilySize] = React.useState("");
   const [address, setAddress] = React.useState("");
@@ -169,10 +169,10 @@ export default function AdminBeneficiariesPage() {
       </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Gender">
-          <FormSelect value={gender} onChange={(e) => setGender(e.target.value as "" | "MALE" | "FEMALE")}>
+          <FormSelect value={gender} onChange={(e) => setGender(e.target.value as "" | "male" | "female")}>
             <option value="">Select gender</option>
-            <option value="MALE">Male</option>
-            <option value="FEMALE">Female</option>
+            <option value="male">male</option>
+            <option value="female">female</option>
           </FormSelect>
         </FormField>
         <FormField label="Category">

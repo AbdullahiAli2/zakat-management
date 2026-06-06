@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
         created_at: Date;
         phone: string | null;
         age: number | null;
-        gender: "MALE" | "FEMALE" | null;
+        gender: "male" | "female" | null;
         country: string | null;
         city: string | null;
         address: string | null;

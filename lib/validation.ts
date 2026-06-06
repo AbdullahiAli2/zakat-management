@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+export const MIN_HUMAN_AGE = 1;
+export const MAX_HUMAN_AGE = 120;
+
+const AGE_MIN_MSG = "Age must be at least 1.";
+const AGE_INVALID_MSG = "This isn't a valid age.";
+
+/** Required age for forms that coerce string inputs (e.g. registration). */
+export const ageSchema = z.coerce
+  .number()
+  .int(AGE_INVALID_MSG)
+  .min(MIN_HUMAN_AGE, AGE_MIN_MSG)
+  .max(MAX_HUMAN_AGE, AGE_INVALID_MSG);
+
+/** Required age when the value is already a number (e.g. react-hook-form valueAsNumber). */
+export const ageNumberSchema = z
+  .number()
+  .int(AGE_INVALID_MSG)
+  .min(MIN_HUMAN_AGE, AGE_MIN_MSG)
+  .max(MAX_HUMAN_AGE, AGE_INVALID_MSG);
+
+/** Optional age for profile/admin updates. */
+export const optionalAgeNumberSchema = ageNumberSchema.optional();
+
 export const registerSchema = z.object({
   firstName: z.string().trim().min(2).max(100),
   lastName: z.string().trim().min(2).max(100),
@@ -9,8 +32,8 @@ export const registerSchema = z.object({
     (val) => (typeof val === "string" && val.trim() === "" ? undefined : typeof val === "string" ? val.trim() : val),
     z.string().min(4).max(50).optional(),
   ),
-  age: z.coerce.number().int().min(1).max(120),
-  gender: z.enum(["MALE", "FEMALE"]),
+  age: ageSchema,
+  gender: z.enum(["male", "female"]),
   country: z.string().trim().min(2).max(100),
   city: z.string().trim().min(2).max(100),
   address: z.string().trim().min(2).max(500),
@@ -25,8 +48,8 @@ export const profileUpdateSchema = z.object({
   firstName: z.string().min(2).max(100).optional(),
   lastName: z.string().min(2).max(100).optional(),
   phone: z.string().max(50).optional(),
-  age: z.number().int().min(1).max(120).optional(),
-  gender: z.enum(["MALE", "FEMALE"]).optional(),
+  age: optionalAgeNumberSchema,
+  gender: z.enum(["male", "female"]).optional(),
   country: z.string().max(100).optional(),
   city: z.string().max(100).optional(),
   address: z.string().optional(),
@@ -59,8 +82,8 @@ export const adminCreateUserSchema = z.object({
     (val) => (typeof val === "string" && val.trim() === "" ? undefined : typeof val === "string" ? val.trim() : val),
     z.string().min(4, "Phone number must be at least 4 characters.").max(50).optional(),
   ),
-  age: z.coerce.number().int().min(1, "Age must be at least 1.").max(120, "Please enter a valid age."),
-  gender: z.enum(["MALE", "FEMALE"], { message: "Please select a gender." }),
+  age: ageSchema,
+  gender: z.enum(["male", "female"], { message: "Please select a gender." }),
   country: z.string().trim().min(2, "Country is required.").max(100),
   city: z.string().trim().min(2, "City is required.").max(100),
   address: z.string().trim().min(2, "Address is required.").max(500),
@@ -74,8 +97,8 @@ export const adminUpdateUserSchema = z
     lastName: z.string().min(2).max(100).optional(),
     email: z.string().email().max(255).optional(),
     phone: z.string().min(4).max(50).optional(),
-    age: z.number().int().min(1).max(120).optional(),
-    gender: z.enum(["MALE", "FEMALE"]).optional(),
+    age: optionalAgeNumberSchema,
+    gender: z.enum(["male", "female"]).optional(),
     country: z.string().min(2).max(100).optional(),
     city: z.string().min(2).max(100).optional(),
     address: z.string().min(2).max(500).optional(),
@@ -157,7 +180,7 @@ export const beneficiaryCreateSchema = z.object({
   firstName: z.string().max(100).optional(),
   lastName: z.string().max(100).optional(),
   phone: z.string().max(50).optional(),
-  gender: z.enum(["MALE", "FEMALE"]).optional(),
+  gender: z.enum(["male", "female"]).optional(),
   category: z.enum(["POOR", "ORPHAN", "WIDOW", "DISABLED", "STUDENT", "EMERGENCY"]),
   nationalId: z.string().max(100).optional(),
   familySize: z.coerce.number().int().positive().optional(),

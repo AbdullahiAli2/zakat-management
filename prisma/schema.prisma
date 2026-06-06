@@ -17,8 +17,8 @@ enum UserRole {
 }
 
 enum Gender {
-  MALE
-  FEMALE
+  male
+  female
 }
 
 enum AccountStatus {
