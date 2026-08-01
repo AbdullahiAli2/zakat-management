@@ -25,9 +25,10 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  /* App UI is light-theme only — keep readable dark text on white surfaces */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #0b1220;
   }
 }
 

@@ -20,10 +20,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeModal } from "@/components/common/fade-modal";
-import { Eye, EyeOff, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { UserPermissionsModal } from "@/components/admin/user-permissions-modal";
+import { Eye, EyeOff, KeyRound, Pencil, Shield, Trash2 } from "lucide-react";
 import { ageNumberSchema, MAX_HUMAN_AGE, MIN_HUMAN_AGE } from "@/lib/validation";
 
 const roleValues = ["SUPERUSER", "ADMIN", "DONOR"] as const;
+const staffRoleValues = ["SUPERUSER", "ADMIN"] as const;
 const createSchema = z.object({
   firstName: z.string().min(2, "First name is required"),
   lastName: z.string().min(2, "Last name is required"),
@@ -35,7 +37,7 @@ const createSchema = z.object({
   country: z.string().min(2, "Country is required"),
   city: z.string().min(2, "City is required"),
   address: z.string().min(2, "Address is required"),
-  role: z.enum(roleValues),
+  role: z.enum(staffRoleValues),
   isActive: z.boolean(),
 });
 const editSchema = z.object({
@@ -87,6 +89,7 @@ export default function AdminUsersPage() {
   const [editId, setEditId] = React.useState<number | null>(null);
   const [resetId, setResetId] = React.useState<number | null>(null);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
+  const [permissionsUserId, setPermissionsUserId] = React.useState<number | null>(null);
 
   const createForm = useForm<z.infer<typeof createSchema>>({
     resolver: zodResolver(createSchema),
@@ -101,7 +104,7 @@ export default function AdminUsersPage() {
       country: "",
       city: "",
       address: "",
-      role: "DONOR",
+      role: "ADMIN",
       isActive: true,
     },
   });
@@ -130,6 +133,7 @@ export default function AdminUsersPage() {
   const editingUser = data?.items.find((u) => u.id === editId);
   const resetUserRow = data?.items.find((u) => u.id === resetId);
   const deletingUserRow = data?.items.find((u) => u.id === deleteId);
+  const permissionsUser = data?.items.find((u) => u.id === permissionsUserId);
 
   React.useEffect(() => {
     if (editingUser) {
@@ -144,7 +148,7 @@ export default function AdminUsersPage() {
         country: editingUser.country ?? "",
         city: editingUser.city ?? "",
         address: editingUser.address ?? "",
-        role: (editingUser.role as "SUPERUSER" | "ADMIN" | "DONOR") ?? "DONOR",
+        role: (editingUser.role as "SUPERUSER" | "ADMIN" | "DONOR") ?? "ADMIN",
         isActive: editingUser.isActive,
       });
     }
@@ -275,6 +279,7 @@ export default function AdminUsersPage() {
                     <TableHead className="text-[#065F46]">EMAIL</TableHead>
                     <TableHead className="text-[#065F46]">PHONE</TableHead>
                     <TableHead className="text-[#065F46]">LOCATION</TableHead>
+                    <TableHead className="text-[#065F46]">STATUS</TableHead>
                     <TableHead className="text-[#065F46]">LAST LOGIN</TableHead>
                     <TableHead className="text-[#065F46]">CREATED AT</TableHead>
                     <TableHead className="text-[#065F46]">Actions</TableHead>
@@ -290,21 +295,38 @@ export default function AdminUsersPage() {
                       <TableCell className="text-black">{u.email}</TableCell>
                       <TableCell className="text-black">{u.phone || "-"}</TableCell>
                       <TableCell className="text-black">{u.city && u.country ? `${u.city}, ${u.country}` : "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant={u.isActive ? "success" : "danger"}>{u.isActive ? "Active" : "Inactive"}</Badge>
+                      </TableCell>
                       <TableCell className="text-black">{u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "-"}</TableCell>
                       <TableCell className="text-black">{new Date(u.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3 text-black/70">
-                          <button type="button" className="hover:text-black" onClick={() => onUpdateUser(u.id, { role: u.role, isActive: !u.isActive })}>
+                          <button
+                            type="button"
+                            title={u.isActive ? "Deactivate user" : "Activate user"}
+                            className="hover:text-black"
+                            onClick={() => onUpdateUser(u.id, { role: u.role, isActive: !u.isActive })}
+                          >
                             {u.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
-                          <button type="button" className="text-amber-600 hover:text-amber-700" onClick={() => setResetId(u.id)}>
+                          <button
+                            type="button"
+                            title="Assign permissions"
+                            className="text-[#065F46] hover:text-[#054e3a]"
+                            onClick={() => setPermissionsUserId(u.id)}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </button>
+                          <button type="button" title="Reset password" className="text-amber-600 hover:text-amber-700" onClick={() => setResetId(u.id)}>
                             <KeyRound className="h-4 w-4" />
                           </button>
-                          <button type="button" className="text-[#0b4a7e] hover:text-[#093d68]" onClick={() => setEditId(u.id)}>
+                          <button type="button" title="Edit user" className="text-[#0b4a7e] hover:text-[#093d68]" onClick={() => setEditId(u.id)}>
                             <Pencil className="h-4 w-4" />
                           </button>
                           <button
                             type="button"
+                            title="Delete user"
                             className="text-red-600 hover:text-red-700"
                             disabled={deleting}
                             onClick={() => setDeleteId(u.id)}
@@ -341,6 +363,14 @@ export default function AdminUsersPage() {
           </div>
         </CardContent>
       </Card>
+
+      <UserPermissionsModal
+        open={Boolean(permissionsUserId)}
+        onOpenChange={(v) => !v && setPermissionsUserId(null)}
+        userId={permissionsUserId}
+        userName={permissionsUser?.name}
+        userRole={permissionsUser?.role}
+      />
 
       <FadeModal
         open={createOpen}
@@ -437,12 +467,13 @@ export default function AdminUsersPage() {
                 className="h-10 w-full rounded-md border border-[#b5cec4] bg-white px-3 text-sm text-black outline-none focus:border-[#065F46] focus:ring-2 focus:ring-[#065F46]/20"
                 {...createForm.register("role")}
               >
-                {roleValues.map((r) => (
+                {staffRoleValues.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-black/55">Donors register themselves on the public sign-up page.</p>
             </div>
 
             <label className="mt-1 flex items-center gap-2 text-sm text-black/80">

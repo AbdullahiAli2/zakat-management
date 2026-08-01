@@ -28,14 +28,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!validated.ok) return NextResponse.json(validated.body, { status: validated.status });
     const parsed = validated.data;
 
-    await prisma.beneficiary.update({
-      where: { id },
-      data: {
-        status: parsed.status,
-        verifiedBy: parsed.status === "APPROVED" || parsed.status === "REJECTED" ? session.userId : undefined,
-        verifiedAt: parsed.status === "APPROVED" || parsed.status === "REJECTED" ? new Date() : undefined,
-      },
-    });
+    // Raw SQL avoids Prisma enum read failures when legacy DB values differ in case.
+    if (parsed.status === "APPROVED" || parsed.status === "REJECTED") {
+      await prisma.$executeRawUnsafe(
+        `UPDATE beneficiaries
+         SET status = ?, verified_by = ?, verified_at = NOW()
+         WHERE id = ?`,
+        parsed.status,
+        session.userId,
+        id,
+      );
+    } else {
+      await prisma.$executeRawUnsafe(
+        `UPDATE beneficiaries
+         SET status = ?, verified_by = NULL, verified_at = NULL
+         WHERE id = ?`,
+        parsed.status,
+        id,
+      );
+    }
 
     await logAudit({
       userId: session.userId,

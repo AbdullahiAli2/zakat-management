@@ -778,7 +778,7 @@ export const api = createApi({
         country: string;
         city: string;
         address: string;
-        role: "SUPERUSER" | "ADMIN" | "DONOR";
+        role: "SUPERUSER" | "ADMIN";
         isActive: boolean;
       }
     >({

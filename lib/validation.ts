@@ -87,7 +87,7 @@ export const adminCreateUserSchema = z.object({
   country: z.string().trim().min(2, "Country is required.").max(100),
   city: z.string().trim().min(2, "City is required.").max(100),
   address: z.string().trim().min(2, "Address is required.").max(500),
-  role: z.enum(["SUPERUSER", "ADMIN", "DONOR"], { message: "Please select a role." }),
+  role: z.enum(["SUPERUSER", "ADMIN"], { message: "Please select a role." }),
   isActive: z.boolean().default(true),
 });
 

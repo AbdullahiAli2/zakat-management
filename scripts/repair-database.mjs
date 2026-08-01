@@ -64,6 +64,35 @@ const repairs = [
   },
 ];
 
+/** Normalize Gender columns to Prisma enum values (MALE/FEMALE). */
+async function repairGenderEnums() {
+  const tables = ["beneficiaries", "users"];
+  for (const table of tables) {
+    try {
+      const cols = await prisma.$queryRawUnsafe(`SHOW COLUMNS FROM \`${table}\` LIKE 'gender'`);
+      if (!cols.length) {
+        console.log(`[SKIP] ${table}.gender missing`);
+        continue;
+      }
+      const type = String(cols[0].Type ?? "");
+      if (type.includes("'MALE'") && type.includes("'FEMALE'") && !type.includes("'male'")) {
+        console.log(`[OK] ${table}.gender already MALE/FEMALE`);
+        continue;
+      }
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE \`${table}\` MODIFY COLUMN gender ENUM('male','female','MALE','FEMALE') NULL`,
+      );
+      await prisma.$executeRawUnsafe(`UPDATE \`${table}\` SET gender = 'MALE' WHERE gender = 'male'`);
+      await prisma.$executeRawUnsafe(`UPDATE \`${table}\` SET gender = 'FEMALE' WHERE gender = 'female'`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE \`${table}\` MODIFY COLUMN gender ENUM('MALE','FEMALE') NULL`);
+      console.log(`[FIXED] ${table}.gender normalized to MALE/FEMALE`);
+    } catch (e) {
+      console.error(`[FAIL] ${table}.gender:`, e?.message ?? e);
+      process.exitCode = 1;
+    }
+  }
+}
+
 async function main() {
   try {
     await ensureAccounting();
@@ -72,8 +101,10 @@ async function main() {
     process.exitCode = 1;
   }
 
+  await repairGenderEnums();
+
   for (const repair of repairs) {
-    const existing = await prisma.$queryRawUnsafe<Array<{ Field: string }>>(repair.check);
+    const existing = await prisma.$queryRawUnsafe(repair.check);
     if (existing.length > 0) {
       console.log(`[OK] ${repair.name} already exists`);
       continue;

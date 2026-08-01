@@ -207,9 +207,14 @@ export default function ApplyPermissionsPage() {
                     key={u.id}
                     type="button"
                     onClick={() => setSelectedUserId(u.id)}
-                    className={`w-full rounded-md px-2 py-2 text-left text-sm ${selectedUserId === u.id ? "bg-[#065F46] text-white" : "hover:bg-black/5"}`}
+                    className={`w-full rounded-md px-2 py-2 text-left text-sm ${
+                      selectedUserId === u.id
+                        ? "bg-[#065F46] text-white"
+                        : "bg-white text-black hover:bg-black/5"
+                    }`}
                   >
-                    <div className="font-medium">{u.name}</div>
+                    <div className="font-medium text-inherit">{u.name}</div>
+                    {u.email ? <div className={`truncate text-xs ${selectedUserId === u.id ? "text-white/80" : "text-black/55"}`}>{u.email}</div> : null}
                   </button>
                 )) : null}
                 {!shouldSearchUsers ? (

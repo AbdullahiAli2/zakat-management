@@ -16,10 +16,22 @@ import {
   useCreateAdminCommunityDistributionMutation,
   useDeleteAdminCommunityDistributionMutation,
   useGetAdminCommunityDistributionsQuery,
+  useUpdateAdminCommunityDistributionMutation,
 } from "@/store/api";
 
 const DISTRIBUTION_TYPES = ["FOOD", "CASH", "MEDICAL", "EDUCATION", "WATER", "EMERGENCY"] as const;
 const STATUSES = ["PENDING", "APPROVED", "COMPLETED", "REJECTED"] as const;
+
+type CommunityItem = {
+  id: number;
+  title: string;
+  distributionType: (typeof DISTRIBUTION_TYPES)[number];
+  beneficiaryCount: number;
+  amount: number;
+  location: string | null;
+  notes: string | null;
+  status: string;
+};
 
 function statusVariant(status: string) {
   if (status === "COMPLETED") return "success" as const;
@@ -33,6 +45,7 @@ export default function AdminCommunityDistributionsPage() {
   const [pageSize, setPageSize] = React.useState(10);
   const [statusFilter, setStatusFilter] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
 
@@ -49,6 +62,7 @@ export default function AdminCommunityDistributionsPage() {
     status: statusFilter || undefined,
   });
   const [createDistribution, { isLoading: creating }] = useCreateAdminCommunityDistributionMutation();
+  const [updateDistribution, { isLoading: updating }] = useUpdateAdminCommunityDistributionMutation();
   const [approveDistribution] = useApproveAdminCommunityDistributionMutation();
   const [completeDistribution] = useCompleteAdminCommunityDistributionMutation();
   const [deleteDistribution, { isLoading: deleting }] = useDeleteAdminCommunityDistributionMutation();
@@ -65,30 +79,47 @@ export default function AdminCommunityDistributionsPage() {
     setNotes("");
   }
 
-  async function submitCreate() {
+  function openEdit(item: CommunityItem) {
+    setSelectedId(item.id);
+    setTitle(item.title);
+    setDistributionType(item.distributionType);
+    setBeneficiaryCount(String(item.beneficiaryCount));
+    setAmount(String(item.amount));
+    setLocation(item.location ?? "");
+    setNotes(item.notes ?? "");
+    setEditOpen(true);
+  }
+
+  function validateForm() {
     if (!title.trim()) {
       toast.error("Title is required");
-      return;
+      return null;
     }
     const count = Number(beneficiaryCount);
     const amt = Number(amount);
     if (!Number.isFinite(count) || count < 1) {
       toast.error("Beneficiary count must be at least 1");
-      return;
+      return null;
     }
     if (!Number.isFinite(amt) || amt <= 0) {
       toast.error("Amount must be greater than 0");
-      return;
+      return null;
     }
+    return {
+      title: title.trim(),
+      distributionType,
+      beneficiaryCount: count,
+      amount: amt,
+      location: location.trim() || undefined,
+      notes: notes.trim() || undefined,
+    };
+  }
+
+  async function submitCreate() {
+    const body = validateForm();
+    if (!body) return;
     try {
-      await createDistribution({
-        title: title.trim(),
-        distributionType,
-        beneficiaryCount: count,
-        amount: amt,
-        location: location.trim() || undefined,
-        notes: notes.trim() || undefined,
-      }).unwrap();
+      await createDistribution(body).unwrap();
       toast.success("Community distribution created");
       setCreateOpen(false);
       resetForm();
@@ -96,6 +127,28 @@ export default function AdminCommunityDistributionsPage() {
     } catch (e) {
       const err = e as { data?: { error?: string } };
       toast.error(err?.data?.error ?? "Create failed");
+    }
+  }
+
+  async function submitEdit() {
+    if (!selectedId) return;
+    const body = validateForm();
+    if (!body) return;
+    try {
+      await updateDistribution({
+        id: selectedId,
+        ...body,
+        location: body.location ?? null,
+        notes: body.notes ?? null,
+      }).unwrap();
+      toast.success("Community distribution updated");
+      setEditOpen(false);
+      setSelectedId(null);
+      resetForm();
+      await refetch();
+    } catch (e) {
+      const err = e as { data?: { error?: string } };
+      toast.error(err?.data?.error ?? "Update failed");
     }
   }
 
@@ -113,6 +166,37 @@ export default function AdminCommunityDistributionsPage() {
     }
   }
 
+  const formFields = (
+    <div className="space-y-4">
+      <FormField label="Title">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ramadan food campaign" className="border-[#b5cec4] bg-white text-black" />
+      </FormField>
+      <FormField label="Distribution Type">
+        <FormSelect value={distributionType} onChange={(e) => setDistributionType(e.target.value as (typeof DISTRIBUTION_TYPES)[number])}>
+          {DISTRIBUTION_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </FormSelect>
+      </FormField>
+      <FormField label="Beneficiary Count">
+        <Input value={beneficiaryCount} onChange={(e) => setBeneficiaryCount(e.target.value)} type="number" min="1" step="1" placeholder="100" className="border-[#b5cec4] bg-white text-black" />
+      </FormField>
+      <FormField label="Amount">
+        <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min="0" step="0.01" placeholder="0.00" className="border-[#b5cec4] bg-white text-black" />
+      </FormField>
+      <FormField label="Location">
+        <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="District / camp / village" className="border-[#b5cec4] bg-white text-black" />
+      </FormField>
+      <FormField label="Notes">
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" className="border-[#b5cec4] bg-white text-black" />
+      </FormField>
+    </div>
+  );
+
+  const formValid = !!title.trim() && !!beneficiaryCount && !!amount && Number(amount) > 0 && Number(beneficiaryCount) >= 1;
+
   return (
     <>
       <FadeModal
@@ -124,34 +208,26 @@ export default function AdminCommunityDistributionsPage() {
         title="New Community Distribution"
         onSave={submitCreate}
         saveLoading={creating}
-        saveDisabled={!title.trim() || !beneficiaryCount || !amount || Number(amount) <= 0 || Number(beneficiaryCount) < 1}
+        saveDisabled={!formValid}
       >
-        <div className="space-y-4">
-          <FormField label="Title">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ramadan food campaign" className="border-[#b5cec4] bg-white text-black" />
-          </FormField>
-          <FormField label="Distribution Type">
-            <FormSelect value={distributionType} onChange={(e) => setDistributionType(e.target.value as (typeof DISTRIBUTION_TYPES)[number])}>
-              {DISTRIBUTION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </FormSelect>
-          </FormField>
-          <FormField label="Beneficiary Count">
-            <Input value={beneficiaryCount} onChange={(e) => setBeneficiaryCount(e.target.value)} type="number" min="1" step="1" placeholder="100" className="border-[#b5cec4] bg-white text-black" />
-          </FormField>
-          <FormField label="Amount">
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min="0" step="0.01" placeholder="0.00" className="border-[#b5cec4] bg-white text-black" />
-          </FormField>
-          <FormField label="Location">
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="District / camp / village" className="border-[#b5cec4] bg-white text-black" />
-          </FormField>
-          <FormField label="Notes">
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" className="border-[#b5cec4] bg-white text-black" />
-          </FormField>
-        </div>
+        {formFields}
+      </FadeModal>
+
+      <FadeModal
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            setSelectedId(null);
+            resetForm();
+          }
+        }}
+        title="Edit Community Distribution"
+        onSave={submitEdit}
+        saveLoading={updating}
+        saveDisabled={!formValid}
+      >
+        {formFields}
       </FadeModal>
 
       <FadeModal
@@ -246,22 +322,27 @@ export default function AdminCommunityDistributionsPage() {
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
                       {d.status === "PENDING" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await approveDistribution({ id: d.id }).unwrap();
-                              toast.success("Distribution approved and journal posted");
-                              await refetch();
-                            } catch (e) {
-                              const err = e as { data?: { error?: string } };
-                              toast.error(err?.data?.error ?? "Approve failed");
-                            }
-                          }}
-                        >
-                          Approve
-                        </Button>
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => openEdit(d)}>
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await approveDistribution({ id: d.id }).unwrap();
+                                toast.success("Distribution approved and journal posted");
+                                await refetch();
+                              } catch (e) {
+                                const err = e as { data?: { error?: string } };
+                                toast.error(err?.data?.error ?? "Approve failed");
+                              }
+                            }}
+                          >
+                            Approve
+                          </Button>
+                        </>
                       ) : null}
                       {d.status === "APPROVED" ? (
                         <Button
