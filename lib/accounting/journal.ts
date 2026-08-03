@@ -98,39 +98,29 @@ export async function reverseJournalEntry(
   input: { journalEntryId: number; reversedBy: number; reason?: string },
 ) {
   const entryRows = await client.$queryRawUnsafe<
-    Array<{ id: number; status: string; reference_type: string; reference_id: number | null; description: string | null }>
-  >("SELECT id, status, reference_type, reference_id, description FROM journal_entries WHERE id = ? LIMIT 1", input.journalEntryId);
+    Array<{ id: number; entry_number: string; status: string }>
+  >("SELECT id, entry_number, status FROM journal_entries WHERE id = ? LIMIT 1", input.journalEntryId);
   const entry = entryRows[0];
   if (!entry) throw Object.assign(new Error("Journal entry not found"), { status: 404 });
   if (entry.status !== "POSTED") throw Object.assign(new Error("Only posted entries can be reversed"), { status: 400 });
 
-  const lineRows = await client.$queryRawUnsafe<
-    Array<{ account_id: number; wallet_id: number | null; debit: number | string; credit: number | string; line_description: string | null }>
-  >("SELECT account_id, wallet_id, debit, credit, line_description FROM journal_entry_lines WHERE journal_entry_id = ?", input.journalEntryId);
-
-  const reversalLines: JournalLineInput[] = lineRows.map((l) => ({
-    accountId: l.account_id,
-    walletId: l.wallet_id,
-    debit: Number(l.credit),
-    credit: Number(l.debit),
-    lineDescription: l.line_description ? `Reversal: ${l.line_description}` : "Reversal",
-  }));
-
-  const reversal = await postJournalEntry(client, {
-    description: input.reason ?? `Reversal of ${entry.description ?? `JE #${entry.id}`}`,
-    referenceType: entry.reference_type as JournalReferenceType,
-    referenceId: entry.reference_id,
-    postedBy: input.reversedBy,
-    lines: reversalLines,
-  });
-
+  // Void the original only. Ledger balances count POSTED entries; excluding the original
+  // already undoes its effect. Posting a counter-entry as well would double-undo and
+  // inflate the system wallet (e.g. deleting/giving community aid appeared to increase balance).
+  const reasonNote = input.reason ? ` | ${input.reason}` : "";
   await client.$executeRawUnsafe(
-    "UPDATE journal_entries SET status = 'REVERSED', reversed_by = ?, reversed_at = NOW() WHERE id = ?",
+    `UPDATE journal_entries
+     SET status = 'REVERSED',
+         reversed_by = ?,
+         reversed_at = NOW(),
+         description = CONCAT(COALESCE(description, ''), ?)
+     WHERE id = ? AND status = 'POSTED'`,
     input.reversedBy,
+    reasonNote,
     input.journalEntryId,
   );
 
-  return reversal;
+  return { journalEntryId: entry.id, entryNumber: entry.entry_number, voided: true as const };
 }
 
 export async function getJournalEntryByReference(
@@ -138,10 +128,13 @@ export async function getJournalEntryByReference(
   referenceType: JournalReferenceType,
   referenceId: number,
 ) {
+  // Prefer the original posting (oldest). Skip legacy counter-entries from the old
+  // reverse implementation that left "Reversal of…" rows POSTED.
   const rows = await client.$queryRawUnsafe<Array<{ id: number; entry_number: string; status: string }>>(
     `SELECT id, entry_number, status FROM journal_entries
      WHERE reference_type = ? AND reference_id = ? AND status = 'POSTED'
-     ORDER BY id DESC LIMIT 1`,
+       AND (description IS NULL OR description NOT LIKE 'Reversal of%')
+     ORDER BY id ASC LIMIT 1`,
     referenceType,
     referenceId,
   );

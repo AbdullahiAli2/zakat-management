@@ -17,13 +17,20 @@ const rawBaseQuery = fetchBaseQuery({
   credentials: "include",
   prepareHeaders: (headers) => {
     headers.set("Content-Type", "application/json");
+    headers.set("Cache-Control", "no-cache");
+    headers.set("Pragma", "no-cache");
     return headers;
   },
+  // Avoid browser/Next caching of GET APIs (critical for live Nisab on donor dashboards).
+  fetchFn: (input, init) => fetch(input, { ...init, cache: "no-store" }),
 });
 
 export const api = createApi({
   reducerPath: "api",
-  tagTypes: ["Auth", "User", "Permissions", "Accounts", "ZakatSummary", "Transactions", "Reports"],
+  tagTypes: ["Auth", "User", "Permissions", "Accounts", "ZakatSummary", "Transactions", "Reports", "SystemWallet"],
+  keepUnusedDataFor: 5,
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   baseQuery: async (args, apiApi, extraOptions) => {
     const result = await rawBaseQuery(args, apiApi, extraOptions);
     if (result.error) return result;
@@ -188,7 +195,10 @@ export const api = createApi({
       transformResponse: (response: any) => response,
       invalidatesTags: [
         { type: "ZakatSummary", id: "LIST" },
+        { type: "ZakatSummary", id: "NISAB" },
+        { type: "Accounts", id: "LIST" },
         { type: "Transactions", id: "LIST" },
+        { type: "SystemWallet", id: "PRIMARY" },
       ],
     }),
     rejectZakatPayment: builder.mutation<{ ok: true }, { id: number }>({
@@ -196,6 +206,7 @@ export const api = createApi({
       transformResponse: (response: any) => response,
       invalidatesTags: [
         { type: "ZakatSummary", id: "LIST" },
+        { type: "Accounts", id: "LIST" },
         { type: "Transactions", id: "LIST" },
       ],
     }),
@@ -204,6 +215,7 @@ export const api = createApi({
         accountBalance: string | null;
         nisabValue: string;
         goldPricePerGram: string;
+        nisabUpdatedAt: string | null;
         rate: string;
         calculatedZakat: string | null;
         paidThisCycle: string | null;
@@ -224,8 +236,10 @@ export const api = createApi({
       transformResponse: (response: any) => response.data,
       providesTags: (_result, _error, arg) => [
         { type: "ZakatSummary", id: "LIST" },
+        { type: "ZakatSummary", id: "NISAB" },
         ...(arg?.accountId ? [{ type: "ZakatSummary" as const, id: arg.accountId }] : []),
       ],
+      keepUnusedDataFor: 0,
     }),
     getNotifications: builder.query<
       {
@@ -336,18 +350,30 @@ export const api = createApi({
     getAdminNisab: builder.query<{ id: number; goldPricePerGram: number; nisabValue: number; updatedAt: string } | null, void>({
       query: () => ({ url: "/api/admin/nisab", method: "GET" }),
       transformResponse: (response: any) => response.data,
+      providesTags: [{ type: "ZakatSummary", id: "NISAB" }],
+      keepUnusedDataFor: 0,
     }),
-    updateAdminNisab: builder.mutation<{ goldPricePerGram: number; nisabValue: number }, { goldPricePerGram: number }>({
+    updateAdminNisab: builder.mutation<
+      { goldPricePerGram: number; nisabValue: number; updatedAt?: string },
+      { goldPricePerGram: number }
+    >({
       query: (body) => ({ url: "/api/admin/nisab", method: "PUT", body }),
       transformResponse: (response: any) => response.data,
+      // Donor above/below Nisab is derived from the live threshold — refresh summaries after update.
+      invalidatesTags: [
+        { type: "ZakatSummary", id: "NISAB" },
+        { type: "ZakatSummary", id: "LIST" },
+      ],
     }),
     getSystemWallet: builder.query<{ id: number | null; balance: number; updatedAt: string | null }, void>({
       query: () => ({ url: "/api/admin/system-wallet", method: "GET" }),
       transformResponse: (response: any) => response.data,
+      providesTags: [{ type: "SystemWallet", id: "PRIMARY" }],
     }),
     adjustSystemWallet: builder.mutation<{ balance: number }, { amount: number; mode: "ADD" | "SUBTRACT"; reason?: string }>({
       query: (body) => ({ url: "/api/admin/system-wallet", method: "PATCH", body }),
       transformResponse: (response: any) => response.data,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }],
     }),
     getAdminWallets: builder.query<
       {
@@ -553,6 +579,7 @@ export const api = createApi({
     >({
       query: (body) => ({ url: "/api/admin/distributions", method: "POST", body }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }, { type: "Transactions", id: "LIST" }],
     }),
     updateAdminDistribution: builder.mutation<
       { ok: true },
@@ -567,10 +594,12 @@ export const api = createApi({
     >({
       query: ({ id, ...body }) => ({ url: `/api/admin/distributions/${id}`, method: "PATCH", body }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }, { type: "Transactions", id: "LIST" }],
     }),
     deleteAdminDistribution: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/admin/distributions/${id}`, method: "DELETE" }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }, { type: "Transactions", id: "LIST" }],
     }),
     getAdminCommunityDistributions: builder.query<
       {
@@ -643,10 +672,12 @@ export const api = createApi({
     deleteAdminCommunityDistribution: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/admin/community-distributions/${id}`, method: "DELETE" }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }, { type: "Transactions", id: "LIST" }],
     }),
     approveAdminCommunityDistribution: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/admin/community-distributions/${id}/approve`, method: "POST" }),
       transformResponse: (response: any) => response,
+      invalidatesTags: [{ type: "SystemWallet", id: "PRIMARY" }, { type: "Transactions", id: "LIST" }],
     }),
     completeAdminCommunityDistribution: builder.mutation<{ ok: true }, { id: number }>({
       query: ({ id }) => ({ url: `/api/admin/community-distributions/${id}/complete`, method: "POST" }),

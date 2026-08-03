@@ -16,6 +16,8 @@ export type ZakatSummarySnapshot = {
   pendingThisCycle?: string | null;
   hasPendingPayment?: boolean;
   calculatedZakat?: string | null;
+  accountBalance?: string | null;
+  nisabValue?: string | null;
 };
 
 /** Shown only when API reports zakat is owed (above Nisab and remaining due > 0). */
@@ -32,6 +34,7 @@ export function ZakatDueBanner({
 
   const remainingDue = Number(summary.remainingDue ?? 0);
   const paidThisCycle = Number(summary.paidThisCycle ?? 0);
+  const wealth = Number(summary.accountBalance ?? 0);
 
   return (
     <Card className="border-[#065F46]/20 bg-[#f0f9f6]">
@@ -40,7 +43,14 @@ export function ZakatDueBanner({
           <div className="text-sm font-semibold text-[#065F46]">Zakat is due on your wealth</div>
           <div className="mt-1 text-2xl font-bold text-black">{formatCurrency(remainingDue)}</div>
           <div className="text-xs text-black/60">
-            Calculated at 2.5% · {formatCurrency(paidThisCycle)} already paid this cycle
+            {wealth > 0
+              ? `${formatCurrency(wealth)} × 2.5% = ${formatCurrency(remainingDue + paidThisCycle)}`
+              : "Wealth × 2.5%"}
+            {" · "}
+            {formatCurrency(paidThisCycle)} already paid this cycle
+          </div>
+          <div className="mt-1 text-[11px] text-black/45">
+            Nisab is only the eligibility threshold — zakat is always calculated on your wallet balance, not on Nisab.
           </div>
         </div>
         <Link href={payHref}>

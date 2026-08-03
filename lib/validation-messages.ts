@@ -225,6 +225,16 @@ export function friendlyBusinessError(message: string): string {
     "You already have a zakat payment pending admin approval":
       "You already submitted zakat and it is waiting for admin approval. You cannot pay again until it is approved or rejected.",
   };
+
+  // Dynamic: "You must pay the full zakat amount due (250.00)"
+  if (message.startsWith("You must pay the full zakat amount due")) {
+    const match = message.match(/\(([^)]+)\)/);
+    const due = match?.[1] ?? "";
+    return due
+      ? `You must pay the full amount due ($${due}). Partial payments are not allowed.`
+      : "You must pay the full zakat amount due. Partial payments are not allowed.";
+  }
+
   return map[message] ?? message;
 }
 

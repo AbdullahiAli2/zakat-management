@@ -11,20 +11,27 @@ import { DashboardStatCard, QuickLinkGrid, ZakatDueBanner, ZakatStatusNotice } f
 import { BookOpen, HandCoins, ScrollText, User, Wallet } from "lucide-react";
 
 export default function DonorDashboardPage() {
-  const { data: accountMe, isLoading: meLoading } = useGetAccountsMeQuery();
+  const { data: accountMe, isLoading: meLoading } = useGetAccountsMeQuery(undefined, {
+    refetchOnFocus: true,
+    refetchOnMountOrArgChange: true,
+  });
   const { data: me } = useGetMeQuery();
   const firstName = (me?.name ?? "Donor").split(" ")[0];
-  const { data: latestTx, isFetching: latestTxLoading } = useGetTransactionsQuery({ page: 1, pageSize: 5 });
-
-  const maalAmount = Number(accountMe?.balance ?? 0);
-  const accountCount = accountMe?.accounts?.length ?? 0;
-  const primaryAccountId = accountMe?.accounts?.[0]?.id;
-  const summarySkip = meLoading || (!primaryAccountId && maalAmount <= 0);
-  const { data: zakatSummary, isFetching: summaryLoading } = useGetZakatSummaryQuery(
-    primaryAccountId ? { accountId: primaryAccountId } : maalAmount > 0 ? { amount: maalAmount } : {},
-    { skip: summarySkip },
+  const { data: latestTx, isFetching: latestTxLoading } = useGetTransactionsQuery(
+    { page: 1, pageSize: 5 },
+    { refetchOnFocus: true, refetchOnMountOrArgChange: true },
   );
 
+  const accountCount = accountMe?.accounts?.length ?? 0;
+  const primaryAccountId = accountMe?.accounts?.[0]?.id;
+  const summarySkip = meLoading || !primaryAccountId;
+  const { data: zakatSummary, isFetching: summaryLoading } = useGetZakatSummaryQuery(
+    { accountId: primaryAccountId },
+    { skip: summarySkip, refetchOnFocus: true, refetchOnMountOrArgChange: true },
+  );
+
+  // Prefer live summary balance so nisab / due stay in sync with the same API snapshot.
+  const maalAmount = Number(zakatSummary?.accountBalance ?? accountMe?.balance ?? 0);
   const nisabValue = Number(zakatSummary?.nisabValue ?? 0);
   const progressPct =
     nisabValue > 0 ? Math.max(0, Math.min(100, Math.round((maalAmount / nisabValue) * 100))) : 0;
@@ -107,6 +114,7 @@ export default function DonorDashboardPage() {
           title="Calculated Zakat (2.5%)"
           value={summaryLoading || summarySkip ? "—" : nisabChecked ? formatCurrency(calculatedZakat) : "—"}
           loading={summaryLoading || meLoading}
+          hint={nisabChecked && maalAmount > 0 ? `${formatCurrency(maalAmount)} × 2.5%` : undefined}
         />
       </div>
 
@@ -194,7 +202,10 @@ export default function DonorDashboardPage() {
             <div className="mt-3 h-2 rounded-full bg-black/10">
               <div className="h-2 rounded-full bg-[#8A6F00]" style={{ width: `${progressPct}%` }} />
             </div>
-            <div className="mt-2 text-[11px] text-black/50">Nisab = 85g gold at current market price.</div>
+            <div className="mt-2 text-[11px] text-black/50">
+              Nisab = 85g × {formatCurrency(zakatSummary?.goldPricePerGram ?? 0)}/g = {formatCurrency(nisabValue || 0)}{" "}
+              (threshold only — zakat due uses wallet × 2.5%)
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">

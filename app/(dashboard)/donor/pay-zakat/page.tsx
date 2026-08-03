@@ -38,13 +38,16 @@ export default function PayZakatPage() {
     nisabValue: string;
   } | null>(null);
   const [receiptOpen, setReceiptOpen] = React.useState(false);
-  const { data: accountMe } = useGetAccountsMeQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: accountMe } = useGetAccountsMeQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+  });
 
   const amount = React.useMemo(() => parseCurrencyInput(amountInput), [amountInput]);
   const summarySkip = !accountId;
   const { data: summary, isFetching: summaryLoading } = useGetZakatSummaryQuery(
     { accountId: accountId ?? undefined },
-    { skip: summarySkip, refetchOnMountOrArgChange: true },
+    { skip: summarySkip, refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
   const remainingDueNumber = Number(summary?.remainingDue ?? 0);
   const selectedAccount = React.useMemo(
@@ -77,8 +80,10 @@ export default function PayZakatPage() {
   const amountError = React.useMemo(() => {
     if (amount <= 0) return null;
     if (remainingDueNumber <= 0) return "No zakat is due this cycle — you cannot pay now.";
-    if (amount > remainingDueNumber) {
-      return `Amount cannot exceed ${formatCurrency(remainingDueNumber)} (remaining due this cycle).`;
+    const amountCents = Math.round(amount * 100);
+    const dueCents = Math.round(remainingDueNumber * 100);
+    if (amountCents !== dueCents) {
+      return `You must pay the full amount due (${formatCurrency(remainingDueNumber)}). Partial payments are not allowed.`;
     }
     if (amount > accountBalanceNumber) {
       return `Amount cannot exceed your wallet balance (${formatCurrency(accountBalanceNumber)}).`;
@@ -95,11 +100,12 @@ export default function PayZakatPage() {
   }, [accountMe, accountId]);
 
   function resetPayForm() {
-    setAmountInput("");
     setZakatType("MAAL");
     setMethod("EVCPLUS");
     const first = accountMe?.accounts?.[0];
     setAccountId(first?.id ?? null);
+    const due = remainingDueNumber > 0 ? remainingDueNumber : 0;
+    setAmountInput(due > 0 ? formatCurrency(due) : "");
   }
 
   function openPayModal() {
@@ -110,6 +116,12 @@ export default function PayZakatPage() {
     resetPayForm();
     setPayOpen(true);
   }
+
+  // Keep amount field synced to live remaining due while the modal is open.
+  React.useEffect(() => {
+    if (!payOpen || payBlockReason || remainingDueNumber <= 0) return;
+    setAmountInput(formatCurrency(remainingDueNumber));
+  }, [payOpen, payBlockReason, remainingDueNumber]);
 
   const canSubmit =
     !paying &&
@@ -133,8 +145,8 @@ export default function PayZakatPage() {
       toast.error("You have no remaining zakat due for this cycle.");
       return;
     }
-    if (amount > remainingDue) {
-      toast.error(`Amount cannot exceed ${formatCurrency(remainingDue)} (remaining due).`);
+    if (Math.round(amount * 100) !== Math.round(remainingDue * 100)) {
+      toast.error(`You must pay the full amount due (${formatCurrency(remainingDue)}).`);
       return;
     }
     if (amount > accountBalanceNumber) {
@@ -167,7 +179,7 @@ export default function PayZakatPage() {
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
             <div className="rounded-md border border-[#065F46]/20 bg-[#065F46]/5 px-3 py-2 text-xs text-[#065F46]">
-              Zakat-only mode: payment is limited to your remaining Zakat due for this cycle.
+              Zakat-only mode: you must pay the full remaining Zakat due for this cycle (wealth × 2.5%).
             </div>
 
             {payBlockReason ? (
@@ -199,8 +211,8 @@ export default function PayZakatPage() {
                   )}
                 </div>
                 <p className="text-xs text-black/70">
-                  Zakat (Maal/Business) rate is <span className="font-semibold">1/40 = 2.5%</span>. System accepts Zakat payment only up to
-                  your remaining due for this cycle.
+                  Zakat (Maal/Business) = <span className="font-semibold">wallet balance × 2.5%</span> when wealth is at or above Nisab.
+                  You must pay the full remaining due — partial amounts are not accepted.
                 </p>
               </div>
             )}
@@ -311,7 +323,7 @@ export default function PayZakatPage() {
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{payBlockReason}</div>
           ) : (
             <div className="rounded-md border border-[#065F46]/20 bg-[#065F46]/5 px-3 py-2 text-xs text-[#065F46]">
-              Payment is limited to your remaining Zakat due for this cycle.
+              You must pay the full remaining due: {formatCurrency(remainingDueNumber)}. Partial payments are not allowed.
             </div>
           )}
 
@@ -321,7 +333,7 @@ export default function PayZakatPage() {
               payBlockReason ? null : (
               <span className="flex items-center justify-between gap-2">
                 <span>
-                  Max allowed this cycle:{" "}
+                  Required amount:{" "}
                   <span className="font-semibold text-black">{formatCurrency(summary?.remainingDue ?? 0)}</span>
                 </span>
                 {remainingDueNumber > 0 ? (
@@ -330,7 +342,7 @@ export default function PayZakatPage() {
                     className="font-semibold text-[#065F46] hover:underline"
                     onClick={() => setAmountInput(formatCurrency(remainingDueNumber))}
                   >
-                    Use Remaining Due
+                    Use Full Amount
                   </button>
                 ) : null}
               </span>

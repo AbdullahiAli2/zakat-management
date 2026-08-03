@@ -5,8 +5,11 @@ import { prisma } from "@/lib/db";
 import { readJwtFromRequest, verifySessionJwt } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { logAudit, logError } from "@/lib/logging";
-import { validationErrorBody } from "@/lib/validation-messages";
 import { parseRequestBody, isZodError, zodErrorBody } from "@/lib/parse-request";
+import { getCurrentNisab } from "@/lib/nisab";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const updateSchema = z.object({
   goldPricePerGram: z.coerce.number().positive(),
@@ -16,38 +19,45 @@ function ip(req: NextRequest) {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 }
 
+function noStoreJson(body: unknown, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const path = "/api/admin/nisab";
   try {
     const token = readJwtFromRequest(req);
-    if (!token) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!token) return noStoreJson({ ok: false, error: "Unauthorized" }, { status: 401 });
     const session = verifySessionJwt(token);
     await requirePermission(session, "NISAB_VIEW");
 
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: number; gold_price_per_gram: number | string; nisab_value: number | string; updated_at: Date }>>(
-      "SELECT id, gold_price_per_gram, nisab_value, updated_at FROM nisab_settings ORDER BY id DESC LIMIT 1",
-    );
-    const current = rows[0] ?? null;
+    const current = await getCurrentNisab();
 
-    return NextResponse.json({
+    return noStoreJson({
       ok: true,
       data: current
         ? {
             id: current.id,
-            goldPricePerGram: Number(current.gold_price_per_gram),
-            nisabValue: Number(current.nisab_value),
-            updatedAt: current.updated_at,
+            goldPricePerGram: Number(current.goldPricePerGram),
+            nisabValue: Number(current.nisabValue),
+            updatedAt: current.updatedAt,
           }
         : null,
     });
   } catch (err) {
     if (isZodError(err)) {
       const zod = zodErrorBody(err);
-      return NextResponse.json(zod.body, { status: zod.status });
+      return noStoreJson(zod.body, { status: zod.status });
     }
     const e = err as { message?: string; stack?: string; status?: number; lineNumber?: number };
     await logError({ userId: null, message: e?.message ?? "Fetch nisab failed", stack: e?.stack, path, lineNumber: e?.lineNumber ?? null });
-    return NextResponse.json({ ok: false, error: "Fetch nisab failed" }, { status: e?.status ?? 500 });
+    return noStoreJson({ ok: false, error: "Fetch nisab failed" }, { status: e?.status ?? 500 });
   }
 }
 
@@ -55,30 +65,41 @@ export async function PUT(req: NextRequest) {
   const path = "/api/admin/nisab";
   try {
     const token = readJwtFromRequest(req);
-    if (!token) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!token) return noStoreJson({ ok: false, error: "Unauthorized" }, { status: 401 });
     const session = verifySessionJwt(token);
     await requirePermission(session, "NISAB_EDIT");
 
     const validated = parseRequestBody(updateSchema, await req.json());
-    if (!validated.ok) return NextResponse.json(validated.body, { status: validated.status });
+    if (!validated.ok) return noStoreJson(validated.body, { status: validated.status });
     const parsed = validated.data;
-    const nisabValue = parsed.goldPricePerGram * 85;
+    const nisabValue = Number((parsed.goldPricePerGram * 85).toFixed(2));
 
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: number }>>("SELECT id FROM nisab_settings ORDER BY id DESC LIMIT 1");
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: number }>>(
+      "SELECT id FROM nisab_settings ORDER BY updated_at DESC, id DESC LIMIT 1",
+    );
     if (rows[0]?.id) {
       await prisma.$executeRawUnsafe(
-        "UPDATE nisab_settings SET gold_price_per_gram = ?, nisab_value = ?, updated_at = NOW() WHERE id = ?",
+        "UPDATE nisab_settings SET gold_price_per_gram = ?, nisab_value = ?, updated_at = NOW(3) WHERE id = ?",
         parsed.goldPricePerGram,
         nisabValue,
         rows[0].id,
       );
     } else {
       await prisma.$executeRawUnsafe(
-        "INSERT INTO nisab_settings (gold_price_per_gram, nisab_value, updated_at) VALUES (?, ?, NOW())",
+        "INSERT INTO nisab_settings (gold_price_per_gram, nisab_value, updated_at) VALUES (?, ?, NOW(3))",
         parsed.goldPricePerGram,
         nisabValue,
       );
     }
+
+    // Keep pending donor payments aligned with the new threshold (balance vs nisab).
+    await prisma.$executeRawUnsafe(
+      `UPDATE zakat_payments zp
+       INNER JOIN accounts a ON a.id = zp.account_id
+       SET zp.nisab_checked = CASE WHEN CAST(a.balance AS DECIMAL(15,2)) >= ? THEN 1 ELSE 0 END
+       WHERE zp.status = 'PENDING'`,
+      nisabValue,
+    );
 
     await logAudit({
       userId: session.userId,
@@ -89,15 +110,23 @@ export async function PUT(req: NextRequest) {
       userAgent: req.headers.get("user-agent"),
     });
 
-    return NextResponse.json({ ok: true, data: { goldPricePerGram: parsed.goldPricePerGram, nisabValue } });
+    const fresh = await getCurrentNisab();
+
+    return noStoreJson({
+      ok: true,
+      data: {
+        goldPricePerGram: Number(fresh?.goldPricePerGram ?? parsed.goldPricePerGram),
+        nisabValue: Number(fresh?.nisabValue ?? nisabValue),
+        updatedAt: fresh?.updatedAt ?? new Date(),
+      },
+    });
   } catch (err) {
     if (isZodError(err)) {
       const zod = zodErrorBody(err);
-      return NextResponse.json(zod.body, { status: zod.status });
+      return noStoreJson(zod.body, { status: zod.status });
     }
     const e = err as { message?: string; stack?: string; status?: number; lineNumber?: number };
     await logError({ userId: null, message: e?.message ?? "Update nisab failed", stack: e?.stack, path, lineNumber: e?.lineNumber ?? null });
-    return NextResponse.json({ ok: false, error: "Update nisab failed" }, { status: e?.status ?? 500 });
+    return noStoreJson({ ok: false, error: "Update nisab failed" }, { status: e?.status ?? 500 });
   }
 }
-

@@ -90,6 +90,9 @@ export default function AdminUsersPage() {
   const [resetId, setResetId] = React.useState<number | null>(null);
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
   const [permissionsUserId, setPermissionsUserId] = React.useState<number | null>(null);
+  const [showCreatePassword, setShowCreatePassword] = React.useState(false);
+  const [showResetPassword, setShowResetPassword] = React.useState(false);
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
 
   const createForm = useForm<z.infer<typeof createSchema>>({
     resolver: zodResolver(createSchema),
@@ -374,7 +377,10 @@ export default function AdminUsersPage() {
 
       <FadeModal
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={(v) => {
+          setCreateOpen(v);
+          if (!v) setShowCreatePassword(false);
+        }}
         title="Create New User"
         titleClassName="text-[#065F46] text-[30px]"
         className="sm:max-w-[760px]"
@@ -452,12 +458,22 @@ export default function AdminUsersPage() {
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-[#065F46]">Password *</label>
-              <Input
-                className="bg-white text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]"
-                placeholder="Enter password"
-                type="password"
-                {...createForm.register("password")}
-              />
+              <div className="relative">
+                <Input
+                  className="bg-white pr-10 text-black placeholder:text-black/45 border-[#b5cec4] focus-visible:ring-[#065F46]/25 focus-visible:border-[#065F46]"
+                  placeholder="Enter password"
+                  type={showCreatePassword ? "text" : "password"}
+                  {...createForm.register("password")}
+                />
+                <button
+                  type="button"
+                  title={showCreatePassword ? "Hide password" : "Show password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-black/50 hover:text-[#065F46]"
+                  onClick={() => setShowCreatePassword((v) => !v)}
+                >
+                  {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {createForm.formState.errors.password ? <div className="text-xs text-red-600">{createForm.formState.errors.password.message}</div> : null}
             </div>
 
@@ -576,7 +592,13 @@ export default function AdminUsersPage() {
 
       <FadeModal
         open={Boolean(resetId)}
-        onOpenChange={(v) => !v && setResetId(null)}
+        onOpenChange={(v) => {
+          if (!v) {
+            setResetId(null);
+            setShowResetPassword(false);
+            setShowResetConfirm(false);
+          }
+        }}
         title="Reset Password"
         titleClassName="text-[#065F46] text-[30px]"
         className="sm:max-w-[620px]"
@@ -586,20 +608,40 @@ export default function AdminUsersPage() {
           </div>
           <form className="grid gap-3 pt-3" onSubmit={resetForm.handleSubmit(onReset)}>
             <div className="space-y-1">
-              <Input
-                className="bg-white text-black placeholder:text-black/50 border-black/15"
-                placeholder="Enter new password (min. 8 characters)"
-                type="password"
-                {...resetForm.register("newPassword")}
-              />
+              <div className="relative">
+                <Input
+                  className="bg-white pr-10 text-black placeholder:text-black/50 border-black/15"
+                  placeholder="Enter new password (min. 8 characters)"
+                  type={showResetPassword ? "text" : "password"}
+                  {...resetForm.register("newPassword")}
+                />
+                <button
+                  type="button"
+                  title={showResetPassword ? "Hide password" : "Show password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-black/50 hover:text-[#065F46]"
+                  onClick={() => setShowResetPassword((v) => !v)}
+                >
+                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-1">
-              <Input
-                className="bg-white text-black placeholder:text-black/50 border-black/15"
-                placeholder="Confirm new password"
-                type="password"
-                {...resetForm.register("confirmPassword")}
-              />
+              <div className="relative">
+                <Input
+                  className="bg-white pr-10 text-black placeholder:text-black/50 border-black/15"
+                  placeholder="Confirm new password"
+                  type={showResetConfirm ? "text" : "password"}
+                  {...resetForm.register("confirmPassword")}
+                />
+                <button
+                  type="button"
+                  title={showResetConfirm ? "Hide password" : "Show password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-black/50 hover:text-[#065F46]"
+                  onClick={() => setShowResetConfirm((v) => !v)}
+                >
+                  {showResetConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <Button variant="outline" type="button" onClick={() => setResetId(null)}>

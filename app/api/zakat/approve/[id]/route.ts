@@ -8,6 +8,7 @@ import { ensureDefaultAccounting } from "@/lib/accounting/ensure-defaults";
 import { postZakatCollectionJournal } from "@/lib/accounting/postings";
 import { notifyPaymentApproved, notifyReceiptGenerated } from "@/lib/notifications";
 import { isZodError, zodErrorBody } from "@/lib/parse-request";
+import { getCurrentNisab } from "@/lib/nisab";
 
 function ip(req: NextRequest) {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
@@ -33,20 +34,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         amount: number | string;
         method: string;
         status: string;
-        nisab_checked: boolean;
       }>
     >(
-      "SELECT id, user_id, account_id, amount, method, status, nisab_checked FROM zakat_payments WHERE id = ? LIMIT 1",
+      "SELECT id, user_id, account_id, amount, method, status FROM zakat_payments WHERE id = ? LIMIT 1",
       paymentId,
     );
     const payment = paymentRows[0];
     if (!payment) return NextResponse.json({ ok: false, error: "Payment not found" }, { status: 404 });
     if (payment.status !== "PENDING") return NextResponse.json({ ok: false, error: "Payment is not pending" }, { status: 400 });
-    if (!payment.nisab_checked) return NextResponse.json({ ok: false, error: "Payment is below Nisab and cannot be approved" }, { status: 400 });
     if (!payment.account_id) return NextResponse.json({ ok: false, error: "Payment has no account" }, { status: 400 });
 
     await prisma.$transaction(async (tx) => {
       await ensureDefaultAccounting(tx);
+
+      // Re-check against the live Nisab threshold (admin may have changed it since payment was created).
+      const nisab = await getCurrentNisab(tx);
+      const nisabValue = Number(nisab?.nisabValue ?? 0);
+
+      const accRows = await tx.$queryRawUnsafe<Array<{ id: number; balance: number | string; status: string }>>(
+        "SELECT id, balance, status FROM accounts WHERE id = ? LIMIT 1 FOR UPDATE",
+        payment.account_id,
+      );
+      const acc = accRows[0];
+      if (!acc || acc.status !== "ACTIVE") throw Object.assign(new Error("Account unavailable"), { status: 400 });
+
+      const accountBalance = Number(acc.balance);
+      const aboveNisab = nisabValue > 0 && accountBalance >= nisabValue;
+      await tx.$executeRawUnsafe(
+        "UPDATE zakat_payments SET nisab_checked = ? WHERE id = ? AND status = 'PENDING'",
+        aboveNisab ? 1 : 0,
+        payment.id,
+      );
+      if (!aboveNisab) {
+        throw Object.assign(new Error("Payment is below Nisab and cannot be approved"), { status: 400 });
+      }
 
       // Enforce idempotency/race-safety: only approve if still pending.
       const paymentUpdateResult = await tx.$executeRawUnsafe(
@@ -58,13 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         throw Object.assign(new Error("Payment is not pending"), { status: 400 });
       }
 
-      const accRows = await tx.$queryRawUnsafe<Array<{ id: number; balance: number | string; status: string }>>(
-        "SELECT id, balance, status FROM accounts WHERE id = ? LIMIT 1 FOR UPDATE",
-        payment.account_id,
-      );
-      const acc = accRows[0];
-      if (!acc || acc.status !== "ACTIVE") throw Object.assign(new Error("Account unavailable"), { status: 400 });
-      const next = Number(acc.balance) - Number(payment.amount);
+      const next = accountBalance - Number(payment.amount);
       if (next < 0) throw Object.assign(new Error("Insufficient account balance"), { status: 400 });
       await tx.$executeRawUnsafe("UPDATE accounts SET balance = ? WHERE id = ?", next, acc.id);
 

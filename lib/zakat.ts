@@ -1,14 +1,7 @@
 import { prisma } from "./db";
 import { Prisma } from "@prisma/client";
 import { committedThisCycle, getCyclePaymentTotals } from "./zakat-cycle";
-
-async function getNisabValueWithTx(tx: Prisma.TransactionClient) {
-  const rows = await tx.$queryRawUnsafe<Array<{ nisab_value: number | string }>>(
-    "SELECT nisab_value FROM nisab_settings ORDER BY id DESC LIMIT 1",
-  );
-  if (!rows[0]) throw new Error("Nisab setting is not configured");
-  return new Prisma.Decimal(rows[0].nisab_value);
-}
+import { getCurrentNisab } from "./nisab";
 
 export type PayZakatInput = {
   userId: number;
@@ -30,7 +23,9 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
   const rate = new Prisma.Decimal(0.025);
 
   return prisma.$transaction(async (tx) => {
-    const nisabValue = await getNisabValueWithTx(tx);
+    const nisab = await getCurrentNisab(tx);
+    if (!nisab) throw new Error("Nisab setting is not configured");
+    const nisabValue = nisab.nisabValue;
 
     if (paymentAmount.lte(0)) throw new Error("Amount must be greater than 0");
     const accountRows = await tx.$queryRawUnsafe<Array<{ id: number; user_id: number; balance: number | string; status: string }>>(
@@ -60,17 +55,19 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
     }
 
     const committed = committedThisCycle(cycleTotals);
-    const remainingDue = Prisma.Decimal.max(recommendedZakat.minus(committed), new Prisma.Decimal(0));
+    const remainingDue = Prisma.Decimal.max(recommendedZakat.minus(committed), new Prisma.Decimal(0)).toDecimalPlaces(2);
+    const payAmount = paymentAmount.toDecimalPlaces(2);
     if (remainingDue.lte(0)) {
       throw new Error("Zakat for this cycle is already fulfilled");
     }
-    if (paymentAmount.gt(remainingDue)) {
-      throw new Error(`Amount exceeds remaining zakat due (${remainingDue.toString()}) for this cycle`);
+    // Full amount only — underpaying (e.g. 249 when 250 is due) is rejected.
+    if (!payAmount.equals(remainingDue)) {
+      throw new Error(`You must pay the full zakat amount due (${remainingDue.toFixed(2)})`);
     }
-    if (accountBalance.lt(paymentAmount)) {
+    if (accountBalance.lt(payAmount)) {
       throw new Error("Insufficient account balance");
     }
-    if (paymentAmount.lte(0)) throw new Error("Zakat amount must be greater than 0");
+    if (payAmount.lte(0)) throw new Error("Zakat amount must be greater than 0");
 
     await tx.$executeRawUnsafe(
       `INSERT INTO zakat_payments
@@ -78,7 +75,7 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
        VALUES (?, ?, ?, ?, ?, 'PENDING', ?, NULL, NULL, ?, NOW())`,
       input.userId,
       donorAccount.id,
-      paymentAmount.toNumber(),
+      payAmount.toNumber(),
       input.zakatType,
       input.method,
       `ZKT-${Date.now()}-${input.userId}`,
@@ -102,7 +99,7 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
       input.userId,
       donorAccount.id,
       payment.id,
-      paymentAmount.toNumber(),
+      payAmount.toNumber(),
       pendingCode,
       pendingCode,
       `Pending zakat payment (recommended due: ${recommendedZakat.toString()})`,
@@ -110,7 +107,7 @@ export async function payZakat(input: PayZakatInput): Promise<PayZakatResult> {
 
     return {
       paymentId: payment.id,
-      amount: paymentAmount,
+      amount: payAmount,
       nisabValue,
       createdAt: payment.created_at,
     };

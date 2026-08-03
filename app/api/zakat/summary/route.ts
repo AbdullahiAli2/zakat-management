@@ -6,25 +6,38 @@ import { Prisma } from "@prisma/client";
 import { committedThisCycle, getCyclePaymentTotals } from "@/lib/zakat-cycle";
 import { readJwtFromRequest, verifySessionJwt } from "@/lib/auth";
 import { validationErrorBody } from "@/lib/validation-messages";
-import { parseRequestBody, isZodError, zodErrorBody } from "@/lib/parse-request";
+import { getCurrentNisab } from "@/lib/nisab";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const querySchema = z.object({
   accountId: z.coerce.number().int().positive().optional(),
   amount: z.coerce.number().positive().optional(),
 });
 
+function noStoreJson(body: unknown, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const raw = Object.fromEntries(req.nextUrl.searchParams.entries());
   const parsed = querySchema.safeParse(raw);
   if (!parsed.success) {
-      return NextResponse.json(validationErrorBody(parsed.error), { status: 400 });
-    }
+    return noStoreJson(validationErrorBody(parsed.error), { status: 400 });
+  }
 
   const rate = new Prisma.Decimal(0.025);
 
-  const nisabRow = await prisma.nisabSetting.findFirst({ orderBy: { updatedAt: "desc" } });
-  const nisabValue = nisabRow ? nisabRow.nisabValue : new Prisma.Decimal(process.env.NISAB_VALUE ?? "0");
-  const goldPricePerGram = nisabRow ? nisabRow.goldPricePerGram : new Prisma.Decimal(process.env.GOLD_PRICE_PER_GRAM ?? "0");
+  const nisabRow = await getCurrentNisab();
+  const nisabValue = nisabRow?.nisabValue ?? new Prisma.Decimal(process.env.NISAB_VALUE ?? "0");
+  const goldPricePerGram = nisabRow?.goldPricePerGram ?? new Prisma.Decimal(process.env.GOLD_PRICE_PER_GRAM ?? "0");
 
   let wealthBase: Prisma.Decimal | null = null;
   let paidThisCycle: Prisma.Decimal | null = null;
@@ -33,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   if (parsed.data.accountId) {
     const token = readJwtFromRequest(req);
-    if (!token) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!token) return noStoreJson({ ok: false, error: "Unauthorized" }, { status: 401 });
     const session = verifySessionJwt(token);
 
     const accountRows = await prisma.$queryRawUnsafe<Array<{ balance: number | string }>>(
@@ -43,7 +56,7 @@ export async function GET(req: NextRequest) {
     );
     const account = accountRows[0];
     if (!account) {
-      return NextResponse.json({ ok: false, error: "Account not found" }, { status: 404 });
+      return noStoreJson({ ok: false, error: "Account not found" }, { status: 404 });
     }
     wealthBase = new Prisma.Decimal(account.balance);
 
@@ -77,12 +90,13 @@ export async function GET(req: NextRequest) {
       ? null
       : !belowNisab && remainingDue.gt(0) && !hasPendingPayment;
 
-  return NextResponse.json({
+  return noStoreJson({
     ok: true,
     data: {
       accountBalance: wealthBase?.toString() ?? null,
       nisabValue: nisabValue.toString(),
       goldPricePerGram: goldPricePerGram.toString(),
+      nisabUpdatedAt: nisabRow?.updatedAt?.toISOString?.() ?? null,
       rate: rate.toString(),
       calculatedZakat: calculatedZakat?.toString() ?? null,
       paidThisCycle: paidThisCycle?.toString() ?? null,
@@ -94,4 +108,3 @@ export async function GET(req: NextRequest) {
     },
   });
 }
-
